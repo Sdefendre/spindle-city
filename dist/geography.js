@@ -24,5 +24,5 @@ const Geo=(()=>{
  const map=document.createElement('canvas');map.width=700;map.height=Math.round(700*H/W);let mc=map.getContext('2d');mc.scale(700/W,700/W);draw(mc,null,false);
  const driving=roads.filter(r=>r.drive&&!r.type.includes('motorway')&&r.p.length>1);
  function routePoint(route,t){const p=route.p;let total=0;const lens=[];for(let i=1;i<p.length;i++){let l=Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]);lens.push(l);total+=l}let dist=((t%total)+total)%total;for(let i=0;i<lens.length;i++){if(dist<=lens[i]){let f=dist/(lens[i]||1),a=p[i],b=p[i+1],angle=Math.atan2(b[1]-a[1],b[0]-a[0]);return{x:a[0]+(b[0]-a[0])*f,y:a[1]+(b[1]-a[1])*f,angle}}dist-=lens[i]}return{x:p[0][0],y:p[0][1],angle:0}}
- return{W,H,roads,buildings,draw,map,blocked,safePoint,nearestRoad,routePoint,driving,data:d};
+ return{W,H,roads,buildings,areas,waterAll,streams,draw,map,blocked,safePoint,nearestRoad,routePoint,driving,data:d};
 })();

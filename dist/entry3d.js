@@ -1,0 +1,1 @@
+import('./play3d.js').catch(error=>{console.error(error);document.getElementById('play').disabled=true;document.getElementById('play').textContent='Unable to start 3D';document.getElementById('loadStatus').textContent='3D could not start in this browser. Try Chrome or Safari with WebGL enabled, then reload.';});

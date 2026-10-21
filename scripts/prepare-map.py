@@ -14,7 +14,7 @@ for id,w in ways.items():
  if len(p)<2:continue
  if t.get('natural')=='coastline':out['coast'].append(p)
  if typ:out['roads'].append({'id':id,'type':typ,'name':name,'p':p,'oneway':t.get('oneway','no'),'bridge':t.get('bridge','no'),'tunnel':t.get('tunnel','no'),'layer':t.get('layer','0')})
- if 'building' in t:out['buildings'].append({'p':p,'name':name,'type':t.get('building'),'height':t.get('building:levels','2')})
+ if 'building' in t:out['buildings'].append({'p':p,'name':name,'type':t.get('building'),'height':t.get('building:levels','2'),'heightMeters':t.get('height',''),'hasLevels':'building:levels' in t})
  if t.get('leisure') in ['park','garden','pitch','playground'] or t.get('landuse') in ['grass','forest','recreation_ground','cemetery']:out['areas'].append({'p':p,'name':name,'type':t.get('leisure',t.get('landuse'))})
  if t.get('natural')=='water' or t.get('waterway')=='riverbank':out['water'].append({'p':p,'name':name})
  if t.get('waterway') in ['river','stream','canal']:out['streams'].append({'p':p,'name':name,'type':t['waterway'],'tunnel':t.get('tunnel','no')})

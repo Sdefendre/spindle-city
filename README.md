@@ -11,3 +11,11 @@ Static HTML/Canvas city exploration game. Serve `dist/` with any static web serv
 Map data © OpenStreetMap contributors, under ODbL: https://www.openstreetmap.org/copyright . Compact source data and provenance are included in the deployed assets. `scripts/prepare-map.py` rebuilds these assets from OSM API XML extracts in ignored `data/`. The four bounding-box extracts plus the full Taunton water relation were used. Source query and originals remain locally in that ignored directory.
 
 Character sprite image supplied/generated in the originating conversation. Controls: WASD/arrows, Shift to sprint, E enter/exit or inspect, M map, Esc pause. Touch joystick and action buttons available on touch devices.
+
+## 3D street-level version
+
+The main entry is now `entry3d.js` → `play3d.js` and `city3d.js`, using locally vendored Three.js 0.180.0 (MIT license included). Buildings are meshes from the original mapped footprints. Tagged building levels/heights are used when present; otherwise game heights are inferred. Window/brick façades and the museum-ship silhouette are modeled, not photographs or surveyed replicas. Terrain and road elevation remain simplified. The character is an animated 3D interpretation of the original bald, bearded character in tan clothing, not the original flat sprite.
+
+WASD walks relative to the camera. Shift runs. Drag the view or use left/right arrow keys to turn. V switches between third-person and first-person. E enters/exits a nearby car. While driving, W/S accelerate/reverse and A/D steer. M opens the geographic map; Escape pauses. Discoveries from the mapped 2D version are retained. The mini map shows the local area. Touch devices use a left movement stick and drag the scene to look.
+
+WebGL 2 is required; the start screen reports a browser graphics failure instead of offering a nonfunctional start button. Geometry is batched by neighborhood chunk, and repeated trees and lamp posts use instanced meshes. All runtime libraries are served with the game. OSM attribution remains visible.
