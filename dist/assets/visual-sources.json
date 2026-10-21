@@ -1,0 +1,16 @@
+{
+  "scope": "Reference-based game reconstructions, not surveyed or photogrammetric replicas. Other city buildings use mapped footprints and regional architectural families.",
+  "landmarks": [
+    {"name":"Academy Building","source":"https://www.theacademyapts.com/photogallery","modeled":"Four-story red-brick street block, arched upper windows, pale stone bands, pilasters and green retail awnings. Proportions approximate."},
+    {"name":"Fall River Government Center","source":"https://www.sosbrutalism.org/cms/15930623","photo":"https://commons.wikimedia.org/wiki/File:Fall_River_City_Hall_2008.jpg","modeled":"Exposed concrete volumes, recessed glazed middle section, projecting upper sun fins, elevated base. Site elevations simplified."},
+    {"name":"Lizzie Borden House","source":"https://lizzie-borden.com/","modeled":"Green clapboard, dark shutters, light trim, gabled roof and central entrance; mapped building footprint."},
+    {"name":"Fall River Justice Center","source":"https://www.mass.gov/info-details/2011-architectural-access-board-design-awards-category-a","modeled":"Mapped curved footprint with modern glazing and pale masonry; exterior interpretation, not exact panel layout."}
+  ],
+  "materials": [
+    {"asset":"Red Brick 03","source":"https://polyhaven.com/a/red_brick_03","author":"Rob Tuytel","license":"CC0","files":["materials/brick-color.jpg","materials/brick-normal.jpg"]},
+    {"asset":"Asphalt 02","source":"https://polyhaven.com/a/asphalt_02","author":"Rob Tuytel","license":"CC0","files":["materials/asphalt-color.jpg"]},
+    {"asset":"Concrete Floor 02","source":"https://polyhaven.com/a/concrete_floor_02","license":"CC0","files":["materials/concrete-color.jpg"]},
+    {"asset":"Venice Sunset HDRI","source":"https://polyhaven.com/a/venice_sunset","license":"CC0","files":["materials/sunset.hdr"],"usage":"Lighting and material reflections only; the game sky is generated and foreign architecture is not used as the background."}
+  ],
+  "vehicle":{"model":"White Tesla Model Y","source":"https://www.tesla.com/modely","modeled":"Original stylized geometry with crossover proportions, glass roof, dark trim and current light-bar cues; no official Tesla mesh or texture is included."}
+}
