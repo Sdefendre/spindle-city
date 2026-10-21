@@ -1,0 +1,13 @@
+{
+  "source": "https://www.openstreetmap.org",
+  "license": "https://opendatacommons.org/licenses/odbl/1-0/",
+  "bounds": [
+    -71.172,
+    41.685,
+    -71.135,
+    41.725
+  ],
+  "retrieved": "2026-10-21",
+  "method": "OpenStreetMap API 0.6 map; four adjoining bounding boxes",
+  "coverage": "Downtown, waterfront and South End; not the whole municipality."
+}
