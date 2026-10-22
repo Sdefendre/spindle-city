@@ -27,3 +27,15 @@ WebGL 2 is required; the start screen reports a browser graphics failure instead
 Photographic CC0 Poly Haven textures supply brick color and normal maps, asphalt and concrete. A CC0 sunset HDR environment supplies reflections/lighting; it is not used as a foreign city background. Sources, usage and limits are recorded in `dist/assets/visual-sources.json`; these are reference links, not copied photo facades. Three.js HDRLoader is vendored with the same MIT license. The map provides direct street-side visits to six architectural locations.
 
 The starter car is an original white Tesla Model Y-inspired mesh with a glass canopy, mirrors, dark trim, wheels, light bars and badging. Normal traffic stays separate. Enter, steer, reverse, exit and first-person behavior use the existing game controls. The vehicle is an approximation, not an official manufacturer CAD model.
+
+## Realism pass
+
+`character.js` adds a proportioned articulated character rig, elbows/knees, gait blending, collar, pockets, seams, fabric bump detail and a fuller face while preserving the original bald/bearded tan-outfit design. The player uses the detailed variant; nearby pedestrians use the lighter variant. These are original procedural models, not scanned humans.
+
+`presentation.js` renders through a multisampled target with depth-based ambient occlusion, restrained highlight diffusion, filmic color mapping and a subtle vignette. High enables the depth pass; Balanced reduces rendering resolution and disables it. These settings are in the pause menu. C toggles cinematic HUD visibility. No device-performance or frame-rate claims are made.
+
+`street-detail.js` adds instanced curbs, benches, bins, hydrants, drains and intersection crosswalk markings around downtown. These street-furniture placements are visual approximations, not surveyed fixtures. Curbs crossing another mapped drivable road are omitted. Pedestrian paths render below drivable roads to avoid coplanar flickering artifacts.
+
+The Model Y body uses a smoothed longitudinal loft and wheel-arch cutouts. Car steering now depends on wheelbase and speed, Space brakes, and coasting models gentle regenerative deceleration. Character collisions include vehicles and street furniture. A movement-return bug that reported motion on a blocked zero-length axis was corrected. Pedestrians become visible again after returning to valid sidewalk positions.
+
+Validation for this pass: JavaScript syntax checks; local browser startup with no console errors; third-person walking, entering the Tesla, driving, braking to a stop, steering, exit, first-person movement, pause/resume, Balanced selection and cinematic HUD toggle. Existing real-map architecture, map shortcuts, public no-login access and discoveries are retained. Full city photogrammetry, surveyed terrain elevation, interiors, production game AI and AAA character assets remain outside this prototype.
