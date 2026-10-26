@@ -1,6 +1,7 @@
 import * as T from './vendor/three.module.js';
 const S=1/1.5;
-export function addArchitecture(scene,renderer){
+export function addArchitecture(scene,renderer,geo=window.Geo){
+ const Geo=geo;
  const loader=new T.TextureLoader(),ready=[];function tex(file,color=true){let t=loader.load('assets/materials/'+file);t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());if(color)t.colorSpace=T.SRGBColorSpace;return t}
  const brick=tex('brick-color.jpg'),normal=tex('brick-normal.jpg',false),concrete=tex('concrete-color.jpg');
  const mat={brick:new T.MeshStandardMaterial({map:brick,normalMap:normal,normalScale:new T.Vector2(.3,.3),color:'#ffffff',vertexColors:true,roughness:.94,side:T.DoubleSide}),stone:new T.MeshStandardMaterial({map:concrete,color:'#ffffff',vertexColors:true,roughness:.93,side:T.DoubleSide}),trim:new T.MeshStandardMaterial({color:'#ffffff',vertexColors:true,roughness:.85,side:T.DoubleSide}),glass:new T.MeshPhysicalMaterial({color:'#7797a4',metalness:.42,roughness:.11,envMapIntensity:1.8,vertexColors:true,side:T.DoubleSide,clearcoat:1,clearcoatRoughness:.08}),roof:new T.MeshStandardMaterial({color:'#ffffff',vertexColors:true,roughness:.88,side:T.DoubleSide})};
@@ -29,21 +30,22 @@ export function addArchitecture(scene,renderer){
  // high-detail mesh on every mapped building.
  function landmarkBox(w,h,d,color,x,y,z,yaw=0){let m=new T.Mesh(new T.BoxGeometry(w,h,d),new T.MeshStandardMaterial({color,roughness:.72,metalness:color==='#30413f'?.32:0}));m.position.set(x,y,z);m.rotation.y=yaw;m.castShadow=m.receiveShadow=true;scene.add(m);return m}
  function landmarkRoof(r,h,color,x,y,z,yaw=0){let m=new T.Mesh(new T.ConeGeometry(r,h,4),new T.MeshStandardMaterial({color,roughness:.82}));m.position.set(x,y,z);m.rotation.y=yaw+Math.PI/4;m.castShadow=m.receiveShadow=true;scene.add(m);return m}
+ function landmarkColumn(radius,height,color,x,y,z){let m=new T.Mesh(new T.CylinderGeometry(radius*.82,radius,height,12),new T.MeshStandardMaterial({color,roughness:.8}));m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;scene.add(m);return m}
  const edgeYaw=e=>Math.atan2(-e.dz,e.dx);
  for(let index=0;index<Geo.buildings.length;index++){
  const src=Geo.buildings[index];if(src.type==='ship'||src.box.r<0||src.box.b<0||src.box.x>Geo.W||src.box.y>Geo.H)continue;
  let p=src.p.map(v=>v.map(a=>a*S));if(p.length>2&&Math.hypot(p[0][0]-p.at(-1)[0],p[0][1]-p.at(-1)[1])<.01)p.pop();if(p.length<3)continue;const es=edges(p),center=[(src.box.x+src.box.r)*S/2,(src.box.y+src.box.b)*S/2],key=Math.floor(center[0]/180)+','+Math.floor(center[1]/180),area=(src.box.r-src.box.x)*(src.box.b-src.box.y)*S*S;
- const academy=src.name==='Academy Building',hall=src.name==='Fall River City Hall',borden=src.name==='Lizzie Borden House',justice=src.name==='Fall River Justice Center',mill=src.name.includes('Mill')||src.name.includes('Narrows')||src.type==='industrial',downtown=src.box.x>1650&&src.box.x<2400&&src.box.y>3350&&src.box.y<4500;
+ const isNewBedford=window.activeCity?.id==='new-bedford',academy=src.name==='Academy Building',hall=src.name==='Fall River City Hall',borden=src.name==='Lizzie Borden House',justice=src.name==='Fall River Justice Center',customHouse=src.name==='U.S. Custom House',mill=src.name.includes('Mill')||src.name.includes('Narrows')||src.type==='industrial',downtown=isNewBedford?src.box.x>1400&&src.box.x<3000&&src.box.y>1200&&src.box.y<2800:src.box.x>1650&&src.box.x<2400&&src.box.y>3350&&src.box.y<4500;
  let floors=src.hasLevels?Math.max(1,parseFloat(src.height)||2):mill?4:downtown&&area>250?3:area>1200?3:2;
- let h=parseFloat(src.heightMeters)||floors*3.25;if(academy){h=17.4;floors=4}if(borden){h=6.6;floors=2}if(justice){h=21;floors=5}if(hall){h=22;floors=4}h=Math.min(75,Math.max(3,h));
- let isHouse=!downtown&&area<260&&!mill||borden,type=isHouse?'siding':justice||hall?'stone':'brick';
+ let h=parseFloat(src.heightMeters)||floors*3.25;if(academy){h=17.4;floors=4}if(borden){h=6.6;floors=2}if(justice){h=21;floors=5}if(hall){h=22;floors=4}if(customHouse){h=8.2;floors=2}h=Math.min(75,Math.max(3,h));
+ let isHouse=!downtown&&area<260&&!mill||borden,type=isHouse?'siding':justice||hall||customHouse?'stone':'brick';
  if(mill&&src.name.includes('Tecumseh'))type='stone';
- let color=C(borden?'#8c9b65':academy?'#bd8a74':mill?'#b8b5a6':isHouse?['#ddd7c3','#b2b9ac','#b5b6bd','#ccc1ab','#a1afa4'][index%5]:['#bbaba1','#c9b6a5','#b7a494','#d0c5af'][index%4]);
+ let color=C(borden?'#8c9b65':academy?'#bd8a74':customHouse?'#c9c4b4':mill?'#b8b5a6':isHouse?['#ddd7c3','#b2b9ac','#b5b6bd','#ccc1ab','#a1afa4'][index%5]:['#bbaba1','#c9b6a5','#b7a494','#d0c5af'][index%4]);
  const outs={wall:b(key,type),trim:b(key,'trim'),glass:b(key,'glass'),roof:b(key,'roof')};
  // Landmark models retain their dedicated treatment.  A rotating subset of downtown
  // footprints receives the full window-and-trim pass so long walking corridors do
  // not read as uninterrupted texture blocks, without multiplying geometry citywide.
- const detail=academy||borden||hall||justice||mill||Math.hypot(center[0]-1310,center[1]-2750)<650;
+ const detail=academy||borden||hall||justice||customHouse||mill||(isNewBedford?Math.hypot(center[0]-1450,center[1]-1300)<500:Math.hypot(center[0]-1310,center[1]-2750)<650);
  const facade=detail||(downtown&&area>70&&index%3===0);
  if(hall){const cx=center[0],cz=center[1],inner=p.map(v=>[cx+(v[0]-cx)*.82,cz+(v[1]-cz)*.82]);for(let e of es){wall(outs.wall,e,4.8,8,C('#c7c4b3'));band(outs.trim,e,7.6,.5,C('#d9d5c1'),.4);wall(outs.glass,e,15.5,21.3,C('#a4b8bb'));band(outs.trim,e,14.8,.8,C('#d5d1bd'),.35);band(outs.trim,e,21.3,.8,C('#d5d1bd'),.35);for(let t=.6;t<e.len;t+=2.8){let a=t-.2,z=t+.2;quad(outs.trim,pt(e,a,15.4,.5),pt(e,z,15.4,.5),pt(e,z,21.5,.5),pt(e,a,21.5,.5),C('#c3c1b3'));quad(outs.trim,pt(e,a,15.4,0),pt(e,a,15.4,.5),pt(e,a,21.5,.5),pt(e,a,21.5,0),C('#aaa99d'))}}for(let e of edges(inner)){wall(outs.glass,e,8,14.8,C('#7c9ba5'));for(let t=0;t<e.len;t+=2){quad(outs.trim,pt(e,t,8,.12),pt(e,t+.08,8,.12),pt(e,t+.08,14.8,.12),pt(e,t,14.8,.12),C('#354c52'))}}cap(outs.roof,p,22,roofColor);special.push({name:src.name,center,kind:'Brutalist concrete, recessed glass and projecting sun fins'});}
  else{
@@ -58,6 +60,7 @@ export function addArchitecture(scene,renderer){
  // A recessed, dark double entry anchors the canopy to the actual facade rather
  // than leaving its stone supports floating in front of a shop window.
  for(let side of [-1,1]){let door=pt(front,t+side*.53,1.42,.14);landmarkBox(1.0,2.18,.075,'#182326',door[0],door[1],door[2],yaw);let pull=pt(front,t+side*.16,1.36,.20);landmarkBox(.035,.42,.028,'#b6a672',pull[0],pull[1],pull[2],yaw);let pier=pt(front,t+side*1.34,1.15,.48);landmarkBox(.18,2.0,.23,'#bcb49f',pier[0],pier[1],pier[2],yaw)}let transom=pt(front,t,2.58,.15);landmarkBox(2.12,.24,.08,'#354951',transom[0],transom[1],transom[2],yaw);let mullion=pt(front,t,1.48,.205);landmarkBox(.055,2.05,.032,'#81775d',mullion[0],mullion[1],mullion[2],yaw);let keystone=pt(front,t,3.18,.17);landmarkBox(.44,.32,.13,'#d8cfb8',keystone[0],keystone[1],keystone[2],yaw);for(let side of [-1,1]){let q=pt(front,t+side*2.08,8.7,.12);landmarkBox(.18,14.2,.14,'#c9bea5',q[0],q[1],q[2],yaw)}}
+ if(customHouse){const front=es.reduce((best,e)=>{let near=Geo.nearestRoad((e.a[0]+e.e[0])*.75,(e.a[1]+e.e[1])*.75,true);return !best||near.distance<best.dist?{e,dist:near.distance}:best},null).e,t=front.len/2,yaw=edgeYaw(front);for(let i=-1.5;i<=1.5;i++){let q=pt(front,t+i*.72,1.72,.7);landmarkColumn(.18,3.1,'#d8d2c1',q[0],q[1],q[2])}let ent=pt(front,t,3.32,.7);landmarkBox(3.25,.26,.75,'#d3cdbd',ent[0],ent[1],ent[2],yaw);let pediment=pt(front,t,3.9,.7);landmarkRoof(1.32,.72,'#d8d2c1',pediment[0],pediment[1],pediment[2],yaw);special.push({name:src.name,center,kind:'Granite Greek Revival portico with four Doric columns'});}
  cap(outs.roof,p,h,roofColor);
  // Low parapets and a roof edge catch the sun and give flat-roofed masonry depth.
  if(facade&&!isHouse&&!hall)for(const e of es)band(outs.trim,e,h-.16,.16,mill?C('#74716b'):C('#6f706d'),.12);
