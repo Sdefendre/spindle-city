@@ -1,0 +1,14 @@
+{
+  "source": "https://www.openstreetmap.org",
+  "license": "https://opendatacommons.org/licenses/odbl/1-0/",
+  "bounds": [
+    -70.943,
+    41.616,
+    -70.912,
+    41.647
+  ],
+  "retrieved": "2026-10-26",
+  "method": "OpenStreetMap API 0.6 map; four adjoining bounding boxes plus full New Bedford Harbor multipolygon relation 1318632",
+  "harbor_relation": "https://www.openstreetmap.org/relation/1318632",
+  "coverage": "New Bedford downtown, historic district, waterfront and harbor; not the whole municipality."
+}

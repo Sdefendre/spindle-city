@@ -73,5 +73,22 @@
     "base": "MakeHuman assets, CC0 1.0",
     "animation": "Walk and Run derived from CMU Graphics Lab Motion Capture Database; the data may not be resold on its own. The data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF EIA-0196217.",
     "notes": "A generated character inspired by the supplied reference, not an exact likeness. Runtime material tint gives the outfit a tan palette. See models/PLAYER-LICENSE.txt."
+  },
+  "additional_landmarks": [
+    {
+      "name": "Braga Bridge",
+      "source": "https://www.southlandholdings.com/featured-projects/i-195-braga-bridge/",
+      "modeled": "Original blue cantilever through-truss interpretation aligned to a mapped bridge segment; simplified geometry and elevation."
+    },
+    {
+      "name": "New Bedford U.S. Custom House",
+      "source": "https://www.gsa.gov/real-estate/explore-historic-buildings/find-a-historic-federal-building/us-custom-house-new-bedford-ma",
+      "modeled": "Original approximate granite portico and columns on the mapped footprint."
+    }
+  ],
+  "pedestrians": {
+    "source": "https://github.com/olatunde85/3d-gen",
+    "license": "MakeHuman-derived CC0 assets with CMU motion capture; see models/npcs/LICENSE.txt",
+    "modeled": "Three generated rigged pedestrian models plus varied original procedural figures."
   }
 }

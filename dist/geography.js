@@ -1,6 +1,8 @@
 'use strict';
-const Geo=(()=>{
- const d=window.CITY_DATA,W=d.width,H=d.height;
+// A geography instance is deliberately data-driven so a city change can reload
+// a different real-map extract without pretending the two municipalities join.
+window.createGeography=(d=>{
+ const W=d.width,H=d.height;
  const bounds=p=>({x:Math.min(...p.map(v=>v[0])),y:Math.min(...p.map(v=>v[1])),r:Math.max(...p.map(v=>v[0])),b:Math.max(...p.map(v=>v[1]))});
  function path(p,close=false){let a=new Path2D();p.forEach(([x,y],i)=>i?a.lineTo(x,y):a.moveTo(x,y));if(close)a.closePath();return a}
  const prepare=(a,close)=>a.map(o=>({...o,box:bounds(o.p),path:path(o.p,close)}));
@@ -25,4 +27,5 @@ const Geo=(()=>{
  const driving=roads.filter(r=>r.drive&&!r.type.includes('motorway')&&r.p.length>1);
  function routePoint(route,t){const p=route.p;let total=0;const lens=[];for(let i=1;i<p.length;i++){let l=Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]);lens.push(l);total+=l}let dist=((t%total)+total)%total;for(let i=0;i<lens.length;i++){if(dist<=lens[i]){let f=dist/(lens[i]||1),a=p[i],b=p[i+1],angle=Math.atan2(b[1]-a[1],b[0]-a[0]);return{x:a[0]+(b[0]-a[0])*f,y:a[1]+(b[1]-a[1])*f,angle}}dist-=lens[i]}return{x:p[0][0],y:p[0][1],angle:0}}
  return{W,H,roads,buildings,areas,waterAll,streams,draw,map,blocked,safePoint,nearestRoad,routePoint,driving,data:d};
-})();
+});
+window.Geo=window.createGeography(window.CITY_DATA);

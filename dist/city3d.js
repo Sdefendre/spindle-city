@@ -6,13 +6,14 @@ export {T};
 export {makeCharacter} from './character.js';
 const S=1/1.5;
 function material(color,extra={}){return new T.MeshStandardMaterial({color,roughness:.86,...extra})}
-export function buildCity(canvas){
+export function buildCity(canvas,geo=window.Geo){
+ const Geo=geo;
  const renderer=new T.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=.94;renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;
  const scene=new T.Scene();scene.background=new T.Color('#aac7d6');scene.fog=new T.Fog('#bccdd0',160,620);
  const camera=new T.PerspectiveCamera(62,innerWidth/innerHeight,.08,850);
  scene.add(new T.HemisphereLight('#d3e2f4','#726449',1.15));const sun=new T.DirectionalLight('#ffddac',3.1);sun.position.set(820,90,2120);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-32;sun.shadow.camera.right=32;sun.shadow.camera.top=32;sun.shadow.camera.bottom=-32;sun.shadow.camera.near=1;sun.shadow.camera.far=220;sun.shadow.bias=-.00012;sun.shadow.normalBias=.12;scene.add(sun,sun.target);
  const ground=new T.Mesh(new T.PlaneGeometry(Geo.W*S+1000,Geo.H*S+1000),material('#a7ab8d'));ground.rotation.x=-Math.PI/2;ground.position.set(Geo.W*S/2,-.08,Geo.H*S/2);ground.receiveShadow=true;scene.add(ground);
- const {wallMeshes,buildingCount,special,materials}=addArchitecture(scene,renderer);
+ const {wallMeshes,buildingCount,special,materials}=addArchitecture(scene,renderer,Geo);
  const texLoader=new T.TextureLoader();function surfaceTexture(name){let t=texLoader.load('assets/materials/'+name);t.colorSpace=T.SRGBColorSpace;t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return t}const asphaltTexture=surfaceTexture('asphalt-color.jpg'),cementTexture=surfaceTexture('concrete-color.jpg');
  // A restrained ripple texture for the river and harbor; pavement is never used for water.
  const waterCanvas=document.createElement('canvas');waterCanvas.width=waterCanvas.height=256;const waterContext=waterCanvas.getContext('2d');waterContext.fillStyle='#d3e2e1';waterContext.fillRect(0,0,256,256);let waterSeed=901;for(let i=0;i<420;i++){waterSeed=(waterSeed*1664525+1013904223)>>>0;const x=waterSeed%256;waterSeed=(waterSeed*1664525+1013904223)>>>0;const y=waterSeed%256;waterContext.fillStyle=i%3?'rgba(89,129,137,.08)':'rgba(255,255,255,.18)';waterContext.fillRect(x,y,5+(waterSeed%20),1)}const waterTexture=new T.CanvasTexture(waterCanvas);waterTexture.colorSpace=T.SRGBColorSpace;waterTexture.wrapS=waterTexture.wrapT=T.RepeatWrapping;waterTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
