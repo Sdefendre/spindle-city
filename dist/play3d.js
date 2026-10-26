@@ -1,9 +1,10 @@
 import {buildCity,makeCharacter,makeCar,T} from './city3d.js';
 import {makeModelY} from './vehicles.js';
 import {makePresentation} from './presentation.js';
+import {makeDetailedCharacter} from './character-model.js';
 const $=id=>document.getElementById(id),canvas=$('game');let city;
 try{city=buildCity(canvas)}catch(e){$('play').disabled=true;$('play').textContent='3D graphics unavailable';$('loadStatus').textContent='This view needs WebGL 2. Open the game in a current browser with hardware acceleration enabled.';throw e}
-const {renderer,scene,camera,sun}=city,character=makeCharacter(scene,{detail:true}),mini=$('mini').getContext('2d'),S=1/1.5,KEY='spindle-city-real-map-v2';
+const {renderer,scene,camera,sun}=city,character=makeDetailedCharacter(scene),mini=$('mini').getContext('2d'),S=1/1.5,KEY='spindle-city-real-map-v2';
 const presentation=makePresentation(renderer,scene,camera);
 const specs=[['Battleship Cove','Museum ships beside the waterfront.'],['Bicentennial Park','The riverfront park along Davol Street.'],['Fall River City Hall','Government Center, above Interstate 195.'],['Lizzie Borden House','The historic house on Second Street.'],['Fall River Heritage State Park','Green space beside the waterfront.'],['Quequechan Rail Trail','Follow the river through the city.'],['Kennedy Park','The South End’s historic park.']];
 const places=specs.map(([name,desc])=>{let options=Geo.data.pois.filter(p=>p.name===name&&p.p[0]>100&&p.p[0]<Geo.W&&p.p[1]>0&&p.p[1]<Geo.H),p=name==='Battleship Cove'?options.find(p=>p.tags.tourism)||options[0]:options[0],safe=Geo.safePoint(...p.p);return{name,desc,x:safe.x,y:safe.y,marker:city.landmark(name,safe.x*S,safe.y*S)}});
