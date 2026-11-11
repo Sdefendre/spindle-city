@@ -89,7 +89,7 @@ func _setup() -> void:
 	for side: float in [-1.0, 1.0]:
 		var lamp := SpotLight3D.new()
 		lamp.position = Vector3(side * spec["width"] * 0.32, 0.72 - RIDE, spec["length"] * 0.5 - 0.1)
-		lamp.rotation = Vector3(deg_to_rad(8.0), PI, 0)
+		lamp.rotation = Vector3(deg_to_rad(-7.0), PI, 0)
 		lamp.spot_range = 46.0
 		lamp.spot_angle = 34.0
 		lamp.light_energy = 0.0

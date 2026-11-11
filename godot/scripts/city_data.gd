@@ -353,7 +353,7 @@ func _on_road_kind(pos: Vector2, key: String, margin: float) -> bool:
 			for code: int in _seg_grid[cell]:
 				@warning_ignore("integer_division")
 				var r := roads[code / 4096]
-				if not r[key]:
+				if key != "" and not r[key]:
 					continue
 				var p: PackedVector2Array = r["p"]
 				var s := code % 4096
@@ -365,7 +365,9 @@ func _on_road_kind(pos: Vector2, key: String, margin: float) -> bool:
 func in_water(pos: Vector2) -> bool:
 	for w in waters:
 		if (w["rect"] as Rect2).has_point(pos) and Geometry2D.is_point_in_polygon(pos, w["p"]):
-			return not _on_road_kind(pos, "bridge", 2.5)
+			# Any mapped road over water counts as solid: bridges, and also
+			# piers and causeways that are not tagged as bridges.
+			return not _on_road_kind(pos, "", 2.5)
 	return false
 
 
@@ -432,7 +434,10 @@ func find_route(from: Vector2, to: Vector2) -> PackedVector2Array:
 	if path.size() == 0:
 		return path
 	var end := nearest_road(to, true)
-	if end["road"] >= 0 and path[path.size() - 1].distance_to(end["p"]) > 2.0:
+	# Finish at the exact roadside point, but only when the graph really got
+	# there; a partial path stops at the closest point the roads reach.
+	var gap: float = path[path.size() - 1].distance_to(end["p"])
+	if end["road"] >= 0 and gap > 2.0 and gap < 45.0:
 		path.append(end["p"])
 	return path
 

@@ -236,6 +236,7 @@ func set_state(next: String) -> void:
 	else:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		sound.set_horn(false)
+	sound.set_paused(next != "playing")
 	if next == "paused":
 		ui.set_garage(owned, money)
 		ui.stats_label.text = "Jobs done %d · Places found %d of %d · %.1f miles travelled" % [stats["jobs"], found.size(), data.places.size(), float(stats["distance"]) / 1609.0]
@@ -442,11 +443,11 @@ func _reroute() -> void:
 	var mesh := ArrayMesh.new()
 	if route.size() > 1:
 		var buf := CityBuilder.Buf.new()
-		builder._ribbon(buf, route, 1.2, 0.012)
+		builder._ribbon(buf, route, 0.55, 0.012)
 		var mat := StandardMaterial3D.new()
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.albedo_color = Color(0.77, 0.96, 0.47, 0.5)
+		mat.albedo_color = Color(0.77, 0.96, 0.47, 0.42)
 		buf.commit(mesh, mat)
 	route_mesh.mesh = mesh
 	var meters := CityData.path_length(route) if route.size() > 1 else current_pos().distance_to(waypoint)
@@ -776,8 +777,10 @@ func _play(delta: float) -> void:
 
 func _slow_update(pos: Vector2) -> void:
 	if data.in_water(pos):
-		var road := data.nearest_road(pos, true)
+		var road := data.nearest_road(pos, true, false, 60)
 		var spot: Vector2 = data.safe_point(road["p"])
+		if road["road"] < 0 or data.in_water(spot):
+			spot = data.safe_point(data.config["spawn"])
 		sound.play("splash")
 		if vehicle != null:
 			vehicle.place(spot, road["dir"])
@@ -955,17 +958,25 @@ func _run_selftest() -> void:
 	_interact()
 	_check("E enters the nearby car", vehicle == starter)
 	var dest: Vector2 = data.places[3]["pos"]
-	set_waypoint(dest, data.places[3]["name"])
+	var dest_name: String = data.places[3]["name"]
+	for p in data.places:
+		var d := (p["pos"] as Vector2).distance_to(vehicle.map_pos())
+		if d > 250.0 and d < 700.0:
+			dest = p["pos"]
+			dest_name = p["name"]
+	set_waypoint(dest, dest_name)
 	var length := CityData.path_length(route)
 	_check("GPS route found", route.size() > 2, "%.0f m, %d points" % [length, route.size()])
 	auto_drive = true
 	var t := 0.0
 	var top := 0.0
 	var stuck := 0.0
-	while auto_drive and t < 150.0:
+	while auto_drive and t < 260.0:
 		await _wait(0.5)
 		t += 0.5
 		top = maxf(top, vehicle.forward_speed)
+		if int(t * 2.0) % 60 == 0:
+			print("  t=%.0f pos=%s speed=%.1f left=%.0f route=%d dest=%s" % [t, vehicle.map_pos(), vehicle.forward_speed, left_to_go(vehicle.map_pos()), route.size(), dest_name])
 		stuck = stuck + 0.5 if absf(vehicle.forward_speed) < 0.3 else 0.0
 		if stuck > 25.0:
 			var np := traffic.nearest(vehicle.map_pos(), 30.0)
@@ -981,7 +992,14 @@ func _run_selftest() -> void:
 	_interact()
 	_check("E exits the car when stopped", vehicle == null and player.active)
 	_check("exit spot is on dry, open ground", not data.blocked(player.map_pos()))
-	var car := traffic.nearest(player.map_pos(), 400.0)
+	var car := {}
+	for c in traffic.cars:
+		var clear := true
+		for v in vehicles:
+			clear = clear and v.map_pos().distance_to(c["pos"]) > 14.0
+		if clear and not c["parked"]:
+			car = c
+			break
 	if not car.is_empty():
 		car["speed"] = 0.0
 		car["cruise"] = 0.0

@@ -1,5 +1,7 @@
 # Spindle City
 
+> A native Godot 4 port lives in [`godot/`](godot/README.md): the same two cities with a physics engine, traffic, jobs, day-night and weather. Run it with `godot --path godot`. The rest of this file describes the original browser version.
+
 Static HTML/Canvas city exploration game. Serve `dist/` with any static web server.
 
 ## Geography
