@@ -69,7 +69,11 @@ func _pick_next(from: int, at: int) -> Array:
 		weights.append(w)
 		total += w
 	if total <= 0.0:
-		return options[0]
+		# Dead end: turn around if the road is two-way.
+		for o: Array in options:
+			if o[0] == from:
+				return o
+		return []
 	var roll := _rng.randf() * total
 	for i in options.size():
 		roll -= weights[i]
@@ -169,7 +173,7 @@ func update(delta: float, focus: Vector2, view_dir: Vector2, obstacles: Array) -
 	if _spawn_timer <= 0.0:
 		_spawn_timer = 0.35
 		for c in cars.duplicate():
-			if (c["pos"] as Vector2).distance_to(focus) > FAR or (c.get("dead", false) and (c["pos"] as Vector2).distance_to(focus) > 45.0):
+			if (c["pos"] as Vector2).distance_to(focus) > FAR or c.get("dead", false):
 				remove(c)
 		var ahead := focus + view_dir * 70.0
 		if _count(false) < MOVING:
@@ -295,6 +299,7 @@ func gap_ahead(pos: Vector2, dir: Vector2, reach: float) -> float:
 	for c in cars:
 		var rel: Vector2 = c["pos"] - pos
 		var f := rel.dot(dir)
-		if f > 1.0 and f < reach and absf(rel.dot(right)) < 2.0:
+		var oncoming: bool = not c["parked"] and (c["dir"] as Vector2).dot(dir) < -0.3
+		if f > 1.0 and f < reach and absf(rel.dot(right)) < (1.1 if oncoming else 2.0):
 			best = minf(best, f)
 	return best

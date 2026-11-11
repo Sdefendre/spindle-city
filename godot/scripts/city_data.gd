@@ -57,6 +57,7 @@ var node_pos: PackedVector2Array = PackedVector2Array()
 var drive_adj: Array = []   # node id -> Array of [next id, road index]
 var walk_adj: Array = []
 var _node_ids := {}
+var _street_nodes := {}
 var drive_nodes: PackedInt32Array = PackedInt32Array()
 var walk_nodes: PackedInt32Array = PackedInt32Array()
 
@@ -244,11 +245,17 @@ func _build_graph() -> void:
 			var cur := _node(p[s])
 			if cur == prev:
 				continue
-			if drive:
+			# Some mapped service lanes run through a building footprint
+			# (drive-throughs, garages). Leave those out of the driving graph.
+			var clear: bool = r["tunnel"] or building_at((p[s - 1] + p[s]) * 0.5) < 0
+			if drive and clear:
 				drive_adj[prev].append([cur, i])
 				if not r["oneway"]:
 					drive_adj[cur].append([prev, i])
 				astar.connect_points(prev, cur, not r["oneway"])
+				if r["type"] != "service":
+					_street_nodes[prev] = true
+					_street_nodes[cur] = true
 			if walk:
 				walk_adj[prev].append([cur, i])
 				walk_adj[cur].append([prev, i])
@@ -256,6 +263,10 @@ func _build_graph() -> void:
 	for id in node_pos.size():
 		if drive_adj[id].size() > 0:
 			drive_nodes.append(id)
+			# Routes should stick to real streets and use service lanes only
+			# for the first or last stretch.
+			if not _street_nodes.has(id):
+				astar.set_point_weight_scale(id, 6.0)
 		else:
 			astar.set_point_disabled(id, true)
 		if walk_adj[id].size() > 0:

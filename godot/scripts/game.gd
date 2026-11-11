@@ -44,11 +44,12 @@ var _crash_cooldown := 0.0
 var _last_pos := Vector2.ZERO
 var _spawn_dir := Vector2.DOWN
 var _fps_samples: Array[float] = []
+var _auto_stuck := 0.0
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	demo = OS.get_cmdline_user_args().has("--demo")
+	demo = OS.get_cmdline_user_args().has("--demo") or OS.get_cmdline_user_args().has("--selftest")
 	_setup_input()
 	_load_save()
 	for arg in OS.get_cmdline_user_args():
@@ -160,7 +161,9 @@ func _ready() -> void:
 	state = "menu"
 	ui.show_state("menu")
 	ui.set_ready()
-	if demo:
+	if OS.get_cmdline_user_args().has("--selftest"):
+		_run_selftest()
+	elif demo:
 		_run_demo()
 
 
@@ -399,7 +402,7 @@ func _shortcut(kind: String) -> void:
 		return
 	# Highway access: put the player in a car on the mapped highway.
 	for r in data.roads:
-		if r["fast"] and str(r["name"]).contains(str(data.config["highway"])) and r["length"] > 150.0 and not r["tunnel"]:
+		if r["type"] == "motorway" and r["length"] > 150.0 and not r["tunnel"] and not r["bridge"]:
 			var p: PackedVector2Array = r["p"]
 			var i: int = p.size() / 2
 			var dir := (p[mini(i + 1, p.size() - 1)] - p[maxi(i - 1, 0)]).normalized()
@@ -576,6 +579,10 @@ func _reset_vehicle() -> void:
 	toast("Car reset onto %s" % (data.roads[road["road"]]["name"] if data.roads[road["road"]]["name"] != "" else "the road"))
 
 
+func left_to_go(pos: Vector2) -> float:
+	return pos.distance_to(route[route.size() - 1]) if route.size() > 0 else 0.0
+
+
 func _drive_auto() -> void:
 	if route.size() < 2:
 		auto_drive = false
@@ -607,6 +614,13 @@ func _drive_auto() -> void:
 		if walked > 60.0:
 			break
 	var near := data.nearest_road(pos, true, false, 1)
+	# Keep to the right-hand lane on two-way streets, like the traffic does.
+	var lane := data.nearest_road(target, true, false, 1)
+	if lane["road"] >= 0 and not data.roads[lane["road"]]["oneway"] and left_to_go(pos) > 18.0:
+		var along: Vector2 = lane["dir"]
+		if along.dot(vehicle.heading_dir()) < 0.0:
+			along = -along
+		target += Vector2(-along.y, along.x) * float(data.roads[lane["road"]]["width"]) * 0.21
 	var want := data.speed_limit(near["road"]) * clampf(1.0 - turn * 0.75, 0.28, 1.0)
 	var gap := traffic.gap_ahead(pos, vehicle.heading_dir(), 9.0 + speed * 1.8)
 	if gap < INF:
@@ -615,6 +629,24 @@ func _drive_auto() -> void:
 	if left < 30.0:
 		want = minf(want, 2.0 + left * 0.3)
 	vehicle.drive_toward(target, want)
+	# Wedged against something: back up briefly, then try again.
+	if speed < 0.4 and want > 1.0:
+		_auto_stuck += get_process_delta_time()
+	elif speed > 1.5:
+		_auto_stuck = 0.0
+	if _auto_stuck > 3.0 and _auto_stuck < 5.2:
+		vehicle.throttle = -0.7
+		vehicle.brake_input = 0.0
+		vehicle.steer_input = -vehicle.steer_input
+		_auto_stuck += get_process_delta_time()
+	elif _auto_stuck >= 5.2 and _auto_stuck < 14.0:
+		pass
+	elif _auto_stuck >= 14.0:
+		_auto_stuck = 0.0
+		auto_drive = false
+		vehicle.throttle = 0.0
+		toast("Auto drive stopped · the way is blocked")
+		return
 	if left < 9.0:
 		auto_drive = false
 		vehicle.throttle = 0.0
@@ -889,3 +921,125 @@ func _run_demo() -> void:
 	await _shot("09_pause")
 	print("traffic ", traffic.cars.size(), " peds ", peds.people.size(), " vehicles ", vehicles.size(), " money ", money)
 	get_tree().quit()
+
+
+# ---------------------------------------------------------------- self test
+
+var _fails := 0
+
+func _check(label: String, ok: bool, detail := "") -> void:
+	print(("PASS  " if ok else "FAIL  ") + label + ("  " + detail if detail != "" else ""))
+	if not ok:
+		_fails += 1
+
+
+## `--selftest`: exercises the main gameplay paths without a human and prints
+## PASS / FAIL lines. Runs headless: godot --headless --fixed-fps 60 --path . -- --selftest
+func _run_selftest() -> void:
+	await _wait(0.3)
+	_on_play()
+	_check("city loaded", data.roads.size() > 500 and data.buildings.size() > 1000, "%d roads, %d buildings" % [data.roads.size(), data.buildings.size()])
+	_check("landmarks resolved", data.places.size() == 7, str(data.places.size()))
+	_check("traffic and pedestrians spawned", traffic.cars.size() > 20 and peds.people.size() > 8, "%d cars, %d people" % [traffic.cars.size(), peds.people.size()])
+	var p0 := player.map_pos()
+	rig.face(_spawn_dir)
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _wait(3.0)
+	Input.action_release("move_forward")
+	Input.action_release("sprint")
+	_check("running on foot moves the player", player.map_pos().distance_to(p0) > 8.0, "%.1f m in 3 s" % player.map_pos().distance_to(p0))
+	var starter := vehicles[0]
+	player.teleport(starter.map_pos() + Vector2(2.6, 0.0))
+	await _wait(0.4)
+	_interact()
+	_check("E enters the nearby car", vehicle == starter)
+	var dest: Vector2 = data.places[3]["pos"]
+	set_waypoint(dest, data.places[3]["name"])
+	var length := CityData.path_length(route)
+	_check("GPS route found", route.size() > 2, "%.0f m, %d points" % [length, route.size()])
+	auto_drive = true
+	var t := 0.0
+	var top := 0.0
+	var stuck := 0.0
+	while auto_drive and t < 150.0:
+		await _wait(0.5)
+		t += 0.5
+		top = maxf(top, vehicle.forward_speed)
+		stuck = stuck + 0.5 if absf(vehicle.forward_speed) < 0.3 else 0.0
+		if stuck > 25.0:
+			var np := traffic.nearest(vehicle.map_pos(), 30.0)
+			print("  stuck at ", vehicle.map_pos(), " heading ", vehicle.heading_dir(), " throttle ", vehicle.throttle, " brake ", vehicle.brake_input,
+				" gap ", traffic.gap_ahead(vehicle.map_pos(), vehicle.heading_dir(), 12.0), " nearest car ", (np["pos"] if not np.is_empty() else "none"),
+				" cardir ", (np["dir"] if not np.is_empty() else ""), " parked ", (np["parked"] if not np.is_empty() else ""), " carspeed ", (np["speed"] if not np.is_empty() else ""),
+				" blocked ", data.blocked(vehicle.map_pos() + vehicle.heading_dir() * 3.5), " bld ", data.building_at(vehicle.map_pos() + vehicle.heading_dir() * 3.0))
+			break
+	_check("auto drive reaches the destination", not auto_drive and vehicle.map_pos().distance_to(route[route.size() - 1] if route.size() > 0 else dest) < 25.0 or waypoint == Vector2.INF,
+		"%.0f s, top %.0f mph, %.0f m from goal, upright %.2f" % [t, top * 2.237, vehicle.map_pos().distance_to(dest), vehicle.global_transform.basis.y.y])
+	auto_drive = false
+	await _wait(3.0)
+	_interact()
+	_check("E exits the car when stopped", vehicle == null and player.active)
+	_check("exit spot is on dry, open ground", not data.blocked(player.map_pos()))
+	var car := traffic.nearest(player.map_pos(), 400.0)
+	if not car.is_empty():
+		car["speed"] = 0.0
+		car["cruise"] = 0.0
+		var side := Vector2(-(car["dir"] as Vector2).y, (car["dir"] as Vector2).x)
+		player.teleport((car["pos"] as Vector2) - side * 2.6)
+		await _wait(0.3)
+		var want_type: String = car["type"]
+		_interact()
+		_check("taking a traffic car", vehicle != null and vehicle.type == want_type, want_type)
+	var before := money
+	if missions.offers.is_empty():
+		missions.update(3.0, current_pos(), 0.0, vehicle != null)
+	var offer := {}
+	for o in missions.offers:
+		if o["kind"] == "courier":
+			offer = o
+	_check("job offers exist", not missions.offers.is_empty(), str(missions.offers.size()))
+	if not offer.is_empty() and vehicle != null:
+		missions.start(offer)
+		_check("courier job started", not missions.job.is_empty())
+		var guard := 0
+		while not missions.job.is_empty() and guard < 6:
+			guard += 1
+			var stop: Vector2 = missions.job["stops"][missions.job["index"]]
+			var road := data.nearest_road(stop, true)
+			vehicle.place(stop, road["dir"])
+			await _wait(1.0)
+		_check("courier job pays out", missions.job.is_empty() and money > before, "+$%d" % (money - before))
+	var wet := Vector2.INF
+	for w in data.waters:
+		var c: Vector2 = (w["rect"] as Rect2).get_center()
+		if data.in_water(c):
+			wet = c
+			break
+	if wet != Vector2.INF and vehicle != null:
+		vehicle.place(wet, Vector2.DOWN)
+		await _wait(1.0)
+		_check("water rescue", not data.in_water(current_pos()))
+	money = 10000
+	_on_car_requested("coupe")
+	var have := false
+	for v in vehicles:
+		have = have or v.type == "coupe"
+	_check("garage purchase delivers a car", owned.has("coupe") and have and money == 10000 - 7500)
+	_shortcut("highway")
+	await _wait(0.5)
+	var hw := data.nearest_road(current_pos(), true)
+	_check("highway shortcut", vehicle != null and hw["road"] >= 0 and data.roads[hw["road"]]["fast"])
+	sky.hour = 22.0
+	sky.set_weather("rain")
+	await _wait(1.0)
+	_check("night and rain", sky.night > 0.9 and sky.weather == "rain" and vehicle.lights_on)
+	set_state("map")
+	await _wait(0.3)
+	set_state("paused")
+	await _wait(0.3)
+	set_state("playing")
+	_check("map and pause round trip", state == "playing" and not get_tree().paused)
+	await _wait(0.5)
+	print("SELFTEST %s (%d failed)" % ["OK" if _fails == 0 else "FAILED", _fails])
+	get_tree().quit(1 if _fails > 0 else 0)

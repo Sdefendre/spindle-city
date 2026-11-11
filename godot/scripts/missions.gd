@@ -272,7 +272,7 @@ func _finish() -> void:
 	var note := ""
 	if kind == "courier":
 		var left: float = job["limit"] - job["time"]
-		pay = int(80.0 + length * 0.22 + left * 2.0)
+		pay = int(80.0 + length * 0.2 + minf(left, 90.0) * 1.5)
 		note = "Parcels delivered with %d s to spare" % int(left)
 	elif kind == "ride":
 		pay = int((35.0 + length * 0.3) * job["comfort"] / 100.0)

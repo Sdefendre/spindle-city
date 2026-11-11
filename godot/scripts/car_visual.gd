@@ -142,14 +142,18 @@ static func build(type: String, color: Color) -> Dictionary:
 		pearl.clearcoat_enabled = true
 		pearl.clearcoat = 1.0
 		pearl.clearcoat_roughness = 0.1
+		var tinted := _mat("y_glass", Color(0.04, 0.06, 0.08), 0.05, 0.65)
+		var chrome := _mat("y_chrome", Color(0.82, 0.84, 0.86), 0.14, 1.0)
+		var dark_chrome := _mat("y_chrome_dark", Color(0.2, 0.21, 0.22), 0.25, 0.9)
+		var lens := _mat("y_lens", Color(0.75, 0.78, 0.8), 0.08, 0.5)
+		var swaps := {"body": pearl, "glass_body": tinted, "chrome": chrome, "chrome_dark": dark_chrome, "alum": chrome,
+			"metal": dark_chrome, "chrome_rear_lights": brake, "chrome_rear_2": lens, "glass_lights": lens, "glass_front_lights": head}
 		for node in glb.find_children("*", "MeshInstance3D", true, false):
 			var mi := node as MeshInstance3D
 			for i in mi.mesh.get_surface_count():
 				var mat := mi.mesh.surface_get_material(i)
-				if mat != null and mat.resource_name == "metal":
-					mi.set_surface_override_material(i, pearl)
-		_box(body, Vector3(1.36, 0.03, 0.03), Vector3(0, 1.0, -2.345), brake)
-		_box(body, Vector3(1.3, 0.03, 0.03), Vector3(0, 0.9, 2.31), head)
+				if mat != null and swaps.has(mat.resource_name):
+					mi.set_surface_override_material(i, swaps[mat.resource_name])
 		return out
 	var pm := paint(color)
 	var glass := _mat("glass", Color(0.07, 0.1, 0.12), 0.08, 0.6)

@@ -76,7 +76,7 @@ func update(delta: float, player: Player, vehicle: Vehicle) -> void:
 		var eye: Vector3
 		if vehicle != null:
 			var b := vehicle.global_transform.basis
-			eye = vehicle.global_position + b.x * 0.36 + b.y * 0.62 + b.z * 0.05
+			eye = vehicle.global_position + b.x * 0.37 + b.y * 0.74 + b.z * -0.32
 		else:
 			eye = player.global_position + Vector3(0, 1.68, 0)
 		cam.global_position = eye + offset * 0.4
