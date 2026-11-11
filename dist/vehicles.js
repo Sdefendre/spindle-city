@@ -2,8 +2,10 @@ import * as T from './vendor/three.module.js';
 import {loadDetailedModelY} from './model-y-detail.js';
 export function makeModelY(city){
  const root=new T.Group();root.name='White Tesla Model Y';city.scene.add(root);
+ // Body panels live in their own group so roll/pitch never moves the wheel pivots.
+ const bodyGroup=new T.Group();bodyGroup.name='Model Y body';root.add(bodyGroup);
  const pearl=new T.MeshPhysicalMaterial({color:'#f5f5f1',metalness:.16,roughness:.18,clearcoat:1,clearcoatRoughness:.12}),trim=new T.MeshStandardMaterial({color:'#171c20',roughness:.57}),glass=new T.MeshPhysicalMaterial({color:'#233b48',metalness:.5,roughness:.1,clearcoat:1,envMapIntensity:1.7}),rubber=new T.MeshStandardMaterial({color:'#121617',roughness:.92}),rim=new T.MeshStandardMaterial({color:'#78838a',metalness:.85,roughness:.27}),red=new T.MeshStandardMaterial({color:'#d33431',emissive:'#991714',emissiveIntensity:.6}),lamp=new T.MeshStandardMaterial({color:'#f5f8ff',emissive:'#dceaff',emissiveIntensity:1.8});
- function mesh(geo,mat,x=0,y=0,z=0){let m=new T.Mesh(geo,mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;root.add(m);return m}
+ function mesh(geo,mat,x=0,y=0,z=0){let m=new T.Mesh(geo,mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;bodyGroup.add(m);return m}
  function box(w,h,d,mat,x,y,z){return mesh(new T.BoxGeometry(w,h,d),mat,x,y,z)}
  function geometry(faces,mat){let a=[];for(let f of faces){a.push(...f[0],...f[1],...f[2]);if(f.length===4)a.push(...f[0],...f[2],...f[3])}let g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(a,3));g.computeVertexNormals();g.computeBoundingSphere();let m=mesh(g,mat);m.material.side=T.DoubleSide;return m}
  function bar(a,b,r,mat){let p=new T.Vector3(...a),q=new T.Vector3(...b),d=q.clone().sub(p),m=mesh(new T.CylinderGeometry(r,r,d.length(),8),mat);m.position.copy(p.add(q).multiplyScalar(.5));m.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),d.normalize());return m}
@@ -21,9 +23,16 @@ export function makeModelY(city){
  box(1.45,.30,.08,pearl,0,.77,-2.32);box(1.42,.25,.08,pearl,0,.72,2.28);
  // Current Model Y cues: narrow front light bar, black glass canopy and full-width rear lighting.
  box(1.55,.045,.035,lamp,0,.90,2.28);for(let side of [-1,1])box(.28,.09,.025,trim,side*.61,.72,2.31);box(1.24,.1,.03,trim,0,.64,2.31);box(1.56,.06,.035,red,0,1.00,-2.34);box(1.5,.12,.035,trim,0,.92,-2.35);box(1.67,.07,.2,trim,0,1.18,-1.95);box(.43,.13,.025,trim,0,.73,-2.36);
- let ca=document.createElement('canvas');ca.width=256;ca.height=64;let c=ca.getContext('2d');c.fillStyle='#a8b2b7';c.font='600 32px sans-serif';c.textAlign='center';c.fillText('T E S L A',128,43);let tx=new T.CanvasTexture(ca);tx.colorSpace=T.SRGBColorSpace;const badge=new T.Mesh(new T.PlaneGeometry(.7,.175),new T.MeshBasicMaterial({map:tx,transparent:true,side:T.DoubleSide}));badge.position.set(0,1.12,-2.347);badge.rotation.y=Math.PI;root.add(badge);
+ let ca=document.createElement('canvas');ca.width=256;ca.height=64;let c=ca.getContext('2d');c.fillStyle='#a8b2b7';c.font='600 32px sans-serif';c.textAlign='center';c.fillText('T E S L A',128,43);let tx=new T.CanvasTexture(ca);tx.colorSpace=T.SRGBColorSpace;const badge=new T.Mesh(new T.PlaneGeometry(.7,.175),new T.MeshBasicMaterial({map:tx,transparent:true,side:T.DoubleSide}));badge.position.set(0,1.12,-2.347);badge.rotation.y=Math.PI;bodyGroup.add(badge);
  // Procedural body stays as the instant fallback; the licensed 2021 GLB replaces it when decoded.
  const fallback=[...root.children];
- root.userData.assetReady=loadDetailedModelY(root,fallback,fn=>{updateWheels=fn});
+ // Detailed body attitude: tilt the GLB's Body node about the same root-frame pivot.
+ let glbBody=null;const P=new T.Matrix4(),Pi=new T.Matrix4(),L0=new T.Matrix4(),M=new T.Matrix4(),tiltM=new T.Matrix4(),ONE=new T.Vector3(1,1,1),pivot=new T.Vector3(0,.45,0),tmp=new T.Vector3();
+ const onBody=node=>{root.updateMatrixWorld(true);P.copy(root.matrixWorld).invert().multiply(node.parent.matrixWorld);Pi.copy(P).invert();L0.copy(node.matrix);glbBody=node};
+ root.userData.setTilt=(pitch,roll)=>{bodyGroup.rotation.set(pitch,0,roll);bodyGroup.position.copy(pivot).sub(tmp.copy(pivot).applyEuler(bodyGroup.rotation));if(glbBody){tiltM.compose(bodyGroup.position,bodyGroup.quaternion,ONE);M.multiplyMatrices(Pi,tiltM).multiply(P).multiply(L0);M.decompose(glbBody.position,glbBody.quaternion,glbBody.scale)}};
+ // Brake/reverse lights: the procedural rear bar and, once loaded, the GLB's rear-light material.
+ const brakeLights=[{m:red,base:red.emissiveIntensity,boost:2.2}];let brakeLevel=0;
+ root.userData.setBrake=a=>{if(a===brakeLevel)return;brakeLevel=a;for(const l of brakeLights)l.m.emissiveIntensity=l.base+a*l.boost};
+ root.userData.assetReady=loadDetailedModelY(root,fallback,fn=>{updateWheels=fn},{onBody}).then(ok=>{if(ok){const seen=new Set();root.traverse(n=>{if(!n.isMesh)return;for(const m of [].concat(n.material))if(m?.emissive&&/rear_lights/i.test(m.name||'')&&!seen.has(m)){seen.add(m);brakeLights.push({m,base:m.emissiveIntensity,boost:5.5});m.emissiveIntensity+=brakeLevel*5.5}})}return ok});
  return root;
 }

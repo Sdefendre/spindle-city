@@ -63,9 +63,14 @@ const trafficParts=(()=>{
 })();
 const trafficMaterials={glass:new T.MeshStandardMaterial({color:'#344c55',metalness:.35,roughness:.2,side:T.DoubleSide}),rubber:new T.MeshStandardMaterial({color:'#1c2223',roughness:.9}),hub:new T.MeshStandardMaterial({color:'#9ba3a2',metalness:.75,roughness:.28}),trim:new T.MeshStandardMaterial({color:'#263032',roughness:.65}),head:new T.MeshStandardMaterial({color:'#fff1d5',emissive:'#b3a78c',emissiveIntensity:.35}),tail:new T.MeshStandardMaterial({color:'#a43830',emissive:'#622017',emissiveIntensity:.3})};
 export function makeCar(city,color='#bbad79'){
- const root=new T.Group();city.scene.add(root);const paint=new T.MeshStandardMaterial({color,metalness:.24,roughness:.38,side:T.DoubleSide});
- function add(geometry,mat,x=0,y=0,z=0){const m=new T.Mesh(geometry,mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;root.add(m);return m}
+ const root=new T.Group();city.scene.add(root);const paint=new T.MeshStandardMaterial({color,metalness:.24,roughness:.38,side:T.DoubleSide}),tail=trafficMaterials.tail.clone(),body=new T.Group();root.add(body);
+ function add(geometry,mat,x=0,y=0,z=0,parent=body){const m=new T.Mesh(geometry,mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}
  add(trafficParts.body,paint);add(trafficParts.cabin,trafficMaterials.glass);add(trafficParts.roof,paint,0,1.56,-.15);
- for(const side of [-1,1]){for(const z of [-1.3,1.3]){const tire=add(trafficParts.tire,trafficMaterials.rubber,side*.88,.36,z);tire.rotation.z=Math.PI/2;const hub=add(trafficParts.hub,trafficMaterials.hub,side*.89,.36,z);hub.rotation.z=Math.PI/2}add(trafficParts.light,trafficMaterials.head,side*.52,.83,2.09);add(trafficParts.light,trafficMaterials.tail,side*.52,.83,-2.11)}
- add(trafficParts.bumper,trafficMaterials.trim,0,.52,2.1);add(trafficParts.bumper,trafficMaterials.trim,0,.52,-2.12);return root;
+ for(const side of [-1,1]){for(const z of [-1.3,1.3]){const tire=add(trafficParts.tire,trafficMaterials.rubber,side*.88,.36,z,root);tire.rotation.z=Math.PI/2;const hub=add(trafficParts.hub,trafficMaterials.hub,side*.89,.36,z,root);hub.rotation.z=Math.PI/2}add(trafficParts.light,trafficMaterials.head,side*.52,.83,2.09);add(trafficParts.light,tail,side*.52,.83,-2.11)}
+ add(trafficParts.bumper,trafficMaterials.trim,0,.52,2.1);add(trafficParts.bumper,trafficMaterials.trim,0,.52,-2.12);
+ // Per-car tail material so one car's brake lights do not light the whole fleet; body group tilts, wheels stay put.
+ const pivot=new T.Vector3(0,.45,0),tmp=new T.Vector3(),base=tail.emissiveIntensity;
+ root.userData.setBrake=a=>{tail.emissiveIntensity=base+a*2.4};
+ root.userData.setTilt=(pitch,roll)=>{body.rotation.set(pitch,0,roll);body.position.copy(pivot).sub(tmp.copy(pivot).applyEuler(body.rotation))};
+ return root;
 }
