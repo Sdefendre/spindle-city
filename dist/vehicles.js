@@ -1,4 +1,5 @@
 import * as T from './vendor/three.module.js';
+import {loadDetailedModelY} from './model-y-detail.js';
 export function makeModelY(city){
  const root=new T.Group();root.name='White Tesla Model Y';city.scene.add(root);
  const pearl=new T.MeshPhysicalMaterial({color:'#f5f5f1',metalness:.16,roughness:.18,clearcoat:1,clearcoatRoughness:.12}),trim=new T.MeshStandardMaterial({color:'#171c20',roughness:.57}),glass=new T.MeshPhysicalMaterial({color:'#233b48',metalness:.5,roughness:.1,clearcoat:1,envMapIntensity:1.7}),rubber=new T.MeshStandardMaterial({color:'#121617',roughness:.92}),rim=new T.MeshStandardMaterial({color:'#78838a',metalness:.85,roughness:.27}),red=new T.MeshStandardMaterial({color:'#d33431',emissive:'#991714',emissiveIntensity:.6}),lamp=new T.MeshStandardMaterial({color:'#f5f8ff',emissive:'#dceaff',emissiveIntensity:1.8});
@@ -15,10 +16,14 @@ export function makeModelY(city){
  let panes=[];for(let i=1;i<cabin.length;i++){let [z,w,base,topw,h]=cabin[i-1],[z2,w2,base2,topw2,h2]=cabin[i];panes.push([[-w,base,z],[-topw,h,z],[-topw2,h2,z2],[-w2,base2,z2]],[[w,base,z],[w2,base2,z2],[topw2,h2,z2],[topw,h,z]],[[-topw,h,z],[topw,h,z],[topw2,h2,z2],[-topw2,h2,z2]])}geometry(panes,glass);
  for(let side of [-1,1]){for(let i=1;i<cabin.length;i++){let p=cabin[i-1],q=cabin[i];bar([side*p[3],p[4]+.015,p[0]],[side*q[3],q[4]+.015,q[0]],.035,pearl)}bar([side*.835,1.17,-.43],[side*.72,1.69,-.43],.033,trim);bar([side*.81,1.1,1.28],[side*.69,1.64,.5],.04,pearl);box(.035,.04,.28,trim,side*.985,1.04,.25);box(.035,.04,.24,trim,side*.985,1.06,-1.0);box(.045,.15,2.8,trim,side*.95,.52,0);const mirror=box(.19,.12,.28,pearl,side*1.035,1.24,.79);mirror.rotation.y=side*.18;box(.07,.085,.24,trim,side*1.12,1.24,.79);}
  const wheels=[];for(let side of [-1,1])for(let z of [-1.47,1.44]){const x=side*.95,steering=new T.Group(),rolling=new T.Group();steering.position.set(x,.39,z);root.add(steering);steering.add(rolling);function part(geo,mat){const m=new T.Mesh(geo,mat);m.castShadow=m.receiveShadow=true;rolling.add(m);return m}let tire=part(new T.CylinderGeometry(.365,.365,.25,28),rubber);tire.rotation.z=Math.PI/2;let hub=part(new T.CylinderGeometry(.255,.255,.265,24),rim);hub.rotation.z=Math.PI/2;let face=part(new T.CylinderGeometry(.21,.21,.272,20),trim);face.rotation.z=Math.PI/2;for(let i=0;i<5;i++){let m=part(new T.BoxGeometry(.025,.055,.39),rim);m.position.x=side*.14;m.rotation.x=i*Math.PI*2/5}let arch=mesh(new T.TorusGeometry(.40,.035,6,24,Math.PI),trim,x,.39,z);arch.rotation.y=Math.PI/2;wheels.push({steering,rolling,front:z>0})}
- root.userData.updateWheels=(speed,steer,dt)=>{for(const w of wheels){w.rolling.rotation.x-=speed*dt/.365;w.steering.rotation.y=w.front?steer:0}};
+ let updateWheels=(speed,steer,dt)=>{for(const w of wheels){w.rolling.rotation.x-=speed*dt/.365;w.steering.rotation.y=w.front?steer:0}};
+ root.userData.updateWheels=(speed,steer,dt)=>updateWheels(speed,steer,dt);
  box(1.45,.30,.08,pearl,0,.77,-2.32);box(1.42,.25,.08,pearl,0,.72,2.28);
  // Current Model Y cues: narrow front light bar, black glass canopy and full-width rear lighting.
  box(1.55,.045,.035,lamp,0,.90,2.28);for(let side of [-1,1])box(.28,.09,.025,trim,side*.61,.72,2.31);box(1.24,.1,.03,trim,0,.64,2.31);box(1.56,.06,.035,red,0,1.00,-2.34);box(1.5,.12,.035,trim,0,.92,-2.35);box(1.67,.07,.2,trim,0,1.18,-1.95);box(.43,.13,.025,trim,0,.73,-2.36);
  let ca=document.createElement('canvas');ca.width=256;ca.height=64;let c=ca.getContext('2d');c.fillStyle='#a8b2b7';c.font='600 32px sans-serif';c.textAlign='center';c.fillText('T E S L A',128,43);let tx=new T.CanvasTexture(ca);tx.colorSpace=T.SRGBColorSpace;const badge=new T.Mesh(new T.PlaneGeometry(.7,.175),new T.MeshBasicMaterial({map:tx,transparent:true,side:T.DoubleSide}));badge.position.set(0,1.12,-2.347);badge.rotation.y=Math.PI;root.add(badge);
+ // Procedural body stays as the instant fallback; the licensed 2021 GLB replaces it when decoded.
+ const fallback=[...root.children];
+ root.userData.assetReady=loadDetailedModelY(root,fallback,fn=>{updateWheels=fn});
  return root;
 }

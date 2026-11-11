@@ -49,3 +49,23 @@ The I-195 access button in Fall River and Route 18 access button in New Bedford 
 Auto drive is a game-only prototype. While in a car, open Auto drive or press F, pick a landmark on the map, and start the route. The planner follows a directed graph derived from mapped road geometry; it does not model all turn restrictions, traffic signals, lanes, road elevations, or real Tesla Full Self-Driving. It can stop if a route is blocked; steering, accelerating, braking or F returns control to the player. Some destinations may not be reachable in the bounded map extract.
 
 Nearby pedestrians use varied appearances and movement. Up to three use locally hosted, rigged MakeHuman-derived models generated with Ara 3D Gen; the rest use lighter procedural figures. Character and CMU motion notices are bundled under `dist/assets/models/npcs/`. Braga Bridge and New Bedford's Custom House have original reference-inspired geometry; they are interpretations rather than surveyed 3D models.
+
+## Controller and detailed Model Y
+
+**Controller.** Plug in or pair a controller, then press any button. Browsers only show a gamepad after you press something. The game only accepts the W3C `standard` mapping (Xbox/PlayStation layouts in current Chrome, Edge and Safari). If your controller uses a non-standard mapping, the start screen and pause panel say so and the controller is ignored.
+
+| Input | Action |
+| --- | --- |
+| Left stick | walk / steer |
+| Right stick | look (the car camera stops auto-following for 1.5 s) |
+| RT / R2 | accelerate |
+| LT / L2 | brake; keep holding once stopped to reverse (release to switch back to braking) |
+| A / ✕ | interact, enter or exit the car; confirm in menus (starts the game from the title screen) |
+| B / ○ | close or back in menus |
+| X / □ · Y / △ | camera view · map |
+| L3 · Start / Options | sprint · pause and resume |
+| D-pad | move menu focus; ◀ ▶ change the focused list (graphics, destination) |
+
+Any stick or trigger input cancels auto drive. When a controller connects or reconnects, when an overlay opens or closes, and on pause, the game ignores the controller until every stick, trigger and button is released. A disconnect or a hidden tab stops all motion, including auto drive, and pauses the game. The game never resumes on its own. `node --test tests/` covers the mapping logic only. It has not been checked against physical controller hardware.
+
+**Model Y.** The parked white car is "Tesla Model Y 2021" by 763468712 (CC BY 4.0; see `CREDITS.md` and `dist/assets/models/tesla-model-y/LICENSE.txt`). The geometry was simplified locally, and the paint, glass, tyres and trim were re-tuned at runtime to pearl white. It shows the 2021 exterior, not the 2025 "Juniper" refresh. The procedural car appears first and stays in place if the GLB fails to load. The first-person view still uses the procedural cockpit, not the model's interior.
