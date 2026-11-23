@@ -6,7 +6,7 @@ import {planRoadRoute} from './route-planner.js';
 
 export function initExtras(g){
  const {Geo,scene,sun,T,toast,S,places}=g,$=id=>document.getElementById(id);
- const KEY='spindle-extras-v1:'+g.config.id;let st={cash:0,hour:9.5,jobs:0};
+ const KEY='spindle-extras-v1:'+g.config.id;let st={cash:0,hour:10.5,jobs:0};
  try{Object.assign(st,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch{}
  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch{}};
  const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -18,8 +18,8 @@ export function initExtras(g){
 
  // ---- day and night: one game day every 20 minutes
  const lights=scene.children.filter(o=>o.isHemisphereLight||o.isAmbientLight).map(o=>({o,base:o.intensity}));
- const base={sun:sun.intensity,sunColor:sun.color.clone(),env:scene.environmentIntensity??1,bg:scene.backgroundIntensity??1,fog:scene.fog?scene.fog.color.clone():null};
- const dusk=new T.Color('#ff9a5c'),nightFog=new T.Color('#0b1220');
+ const base={sun:sun.intensity,sunColor:sun.color.clone(),env:scene.environmentIntensity??.84,bg:scene.backgroundIntensity??.94,fog:scene.fog?scene.fog.color.clone():null};
+ const dusk=new T.Color('#f0a875'),nightFog=new T.Color('#0c1422');
  const lamp=new T.SpotLight('#fff1d6',0,70,.55,.6,1.2);lamp.castShadow=false;scene.add(lamp,lamp.target);
  function applySky(){
   const elev=Math.sin((st.hour-6)/12*Math.PI),d=clamp((elev+.1)/.35,0,1),day=d*d*(3-2*d),low=1-clamp(Math.abs(elev)/.4,0,1);
