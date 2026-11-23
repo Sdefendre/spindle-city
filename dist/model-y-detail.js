@@ -59,7 +59,7 @@ function rigWheels(model,meta){
  * Load the detailed body into `root`, hiding `fallback` meshes on success.
  * Always resolves (true = detailed model active), warning once on failure.
  */
-export function loadDetailedModelY(root,fallback,onWheels,{src=MODEL_Y_SRC}={}){
+export function loadDetailedModelY(root,fallback,onWheels,{src=MODEL_Y_SRC,onBody=null}={}){
  return new Promise(resolve=>{
   const start=()=>{
    const meta=fetch(src.replace(/[^/]+$/,'asset.json')).then(r=>r.ok?r.json():null).catch(()=>null);
@@ -68,6 +68,7 @@ export function loadDetailedModelY(root,fallback,onWheels,{src=MODEL_Y_SRC}={}){
      const model=gltf.scene||gltf.scenes?.[0];if(!model)throw new Error('GLB has no scene');
      const wheels=rigWheels(model,await meta);tuneMaterials(model);model.name='Tesla Model Y 2021 (detailed)';
      root.add(model);for(const node of fallback)node.visible=false;
+     const bodyNode=model.getObjectByName('Body');if(bodyNode&&onBody)onBody(bodyNode);
      if(wheels){const axis=new T.Vector3(1,0,0),up=new T.Vector3(0,1,0),q=new T.Quaternion();onWheels((speed,steer,dt)=>{for(const w of wheels){w.angle+=w.sign*speed*dt/w.radius;w.spin.quaternion.copy(w.spinBase).multiply(q.setFromAxisAngle(axis,w.angle));w.steer.quaternion.copy(w.steerBase).multiply(q.setFromAxisAngle(up,w.front?steer:0))}})}
      resolve(true);
     }catch(error){warnOnce(error);resolve(false)}
