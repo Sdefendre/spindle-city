@@ -115,11 +115,12 @@ export function createPedestrians(scene,Geo,random=Math.random){
    recycleTimer=0;
    // One hidden, far-away walker is recycled per interval to keep exploration
    // populated without a burst of models appearing around the player.
-   const distant=pedestrians.filter(person=>Math.hypot(person.x-player.x,person.y-player.y)>RECYCLE_RADIUS&&!person.c.root.visible).sort((a,b)=>Math.hypot(b.x-player.x,b.y-player.y)-Math.hypot(a.x-player.x,a.y-player.y))[0];
+   const distant=pedestrians.filter(person=>!person.knocked&&Math.hypot(person.x-player.x,person.y-player.y)>RECYCLE_RADIUS&&!person.c.root.visible).sort((a,b)=>Math.hypot(b.x-player.x,b.y-player.y)-Math.hypot(a.x-player.x,a.y-player.y))[0];
    const placement=distant&&suitablePlacement(player,CLOSE_VIEW_RADIUS*1.35,ACTIVE_RADIUS*.96);
    if(placement)relocate(distant,placement);
   }
   for(const person of pedestrians){
+   if(person.knocked){person.c.root.visible=false;continue;}
    const pause=(phase+person.pauseOffset)%person.pauseCycle<person.pauseDuration;
    if(!pause)person.pos+=person.direction*person.speed*dt*1.5;
    const roadPoint=Geo.routePoint(person.route,person.pos),roadDistance=Math.hypot(roadPoint.x-player.x,roadPoint.y-player.y);

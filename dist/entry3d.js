@@ -2,8 +2,8 @@ const city=window.activeCity;
 async function loadCity(){
  if(!window[city.mapKey])await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=city.mapAsset;script.onload=resolve;script.onerror=()=>reject(new Error('Could not load '+city.name+' map data.'));document.head.append(script)});
  window.CITY_DATA=window[city.mapKey];window.Geo=window.createGeography(window.CITY_DATA);
- document.title=`${city.brand} 3D | ${city.name}`;
- document.querySelector('.brand h1').firstChild.nodeValue=city.brand;
+ document.title=`Tesla City Drive | ${city.name}`;
+ document.querySelector('.brand h1').firstChild.nodeValue='TESLA';
  document.querySelector('meta[name="description"]').content=`Walk ${city.name} at street level in 3D. Explore real mapped streets, landmarks and waterfront.`;
  document.getElementById('game').setAttribute('aria-label',`3D ${city.name} street-level exploration game`);
  document.querySelectorAll('[data-city-name]').forEach(el=>el.textContent=city.name);

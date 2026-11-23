@@ -77,3 +77,12 @@ test('player-car wrapper: a car that starts overlapping something can still driv
  for(let i=0;i<60;i++)pd.step(w,{throttle:1,maxSpeed:18},DT,[other,w]);
  assert.ok(w.y>3,'drives away from an overlapping car');
 });
+
+// A distinct user-visible contract: boost improves forward acceleration without
+// weakening brakes or increasing the reverse-speed cap.
+test('acceleration boost is stronger forward while braking and reverse stay bounded',()=>{
+ const normal=car(),boost=car();run(normal,{throttle:1,maxSpeed:24},2);run(boost,{throttle:1,maxSpeed:24,boost:true},2);
+ assert.ok(boost.speed>normal.speed+2);
+ const reverse=car();run(reverse,{throttle:-1,boost:true},10);assert.ok(reverse.speed>=-6);
+ run(boost,{throttle:1,boost:true,brake:1},4);assert.ok(boost.speed<.1,'brake overrides forward boost');
+});

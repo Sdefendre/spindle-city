@@ -42,6 +42,7 @@ export function stepDriving(state,input,dt,world,cars=[],ignore=null){
  for(let i=0;i<steps;i++){
   const speed=state.speed||0,abs=Math.abs(speed),sign=Math.sign(speed);
   let acceleration=throttle>0?5.0*throttle*(1-.55*clamp(abs/maxSpeed,0,1)):throttle<0?3.1*throttle:0;
+  if(input.boost&&throttle>0&&speed>=0&&!brake)acceleration*=1.65;
   if(throttle*speed<-.08)acceleration=-sign*7*Math.abs(throttle);
   acceleration-=sign*(.13+.0028*speed*speed+(Math.abs(throttle)<.02?1.15:0)+brake*8.5);
   let next=clamp(speed+acceleration*h,-6,maxSpeed);
