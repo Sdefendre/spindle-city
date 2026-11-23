@@ -1,0 +1,199 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0d1118"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Reality View"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png"><link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml"><title>Spindle City | Tesla Reality View · FSD v15</title><meta name="description" content="Drive Fall River and New Bedford in Tesla FSD v15 Reality View with live sky-blue path ribbons, AR sky chevrons, and tap-to-go navigation."><link rel="stylesheet" href="style.css"></head><body>
+<canvas id="game" aria-label="3D Spindle City Tesla Reality View"></canvas><div class="grain"></div>
+
+<!-- Top-Left Tesla FSD v15 Driving Cluster -->
+<section id="rvCluster" aria-label="Driving telemetry">
+ <div class="rv-speed-row">
+  <div class="rv-speed-block">
+   <span id="rvSpeed">0</span>
+   <span class="rv-unit">MPH</span>
+  </div>
+  <div id="rvGear" class="rv-gear" aria-label="Gear">
+   <span data-g="P" class="active">P</span><span data-g="R">R</span><span data-g="N">N</span><span data-g="D">D</span>
+  </div>
+  <div id="rvLimit" class="rv-limit" title="Road speed limit">
+   <small>SPEED<br>LIMIT</small>
+   <b id="rvLimitVal">35</b>
+  </div>
+ </div>
+ <div class="rv-status-row">
+  <button id="rvFsdPill" class="rv-fsd-pill" title="Toggle FSD Auto Drive (F)">
+   <svg class="rv-wheel-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M3.5 10.2h17M12 14.2v6.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+   <span id="rvFsdLabel">REALITY VIEW · FSD v15</span>
+  </button>
+  <button id="rvProfile" class="rv-profile-pill" title="Cycle FSD speed profile">Standard</button>
+ </div>
+ <div id="location"><span class="live-dot"></span><span id="district">SOUTH MAIN STREET</span><small><span data-city-name>Fall River</span>, <span data-city-state>MASSACHUSETTS</span></small></div>
+</section>
+
+<!-- Top-Center AR Navigation Maneuver Pill -->
+<div id="rvManeuver" class="hidden" role="status">
+ <span id="rvTurnIcon" class="rv-turn-icon">↑</span>
+ <div class="rv-maneuver-text">
+  <b id="rvManeuverDist">0.4 mi</b>
+  <span id="rvManeuverDest">Tap any road to navigate</span>
+ </div>
+ <button id="rvCancelNav" title="Cancel route">×</button>
+</div>
+
+<!-- Top-Right Compact Nav & Landmark Card (hidden in Split View & Quiet Mode) -->
+<aside id="mission">
+ <div class="rv-mission-head">
+  <small>FSD v15 · TAP ROAD TO GO</small>
+  <b id="count">0 / 7</b>
+ </div>
+ <h2>Reality View.</h2>
+ <p>Tap any street in the 3D scene to drop a destination pin and let FSD v15 drive there.</p>
+ <div class="progress"><span id="progressBar"></span></div>
+ <div class="progress-label"><span>LANDMARKS DISCOVERED</span><span id="rvTapHint">TAP 3D ROAD</span></div>
+ <button id="mapButton"><span>Split Navigation</span><kbd>M</kbd></button>
+</aside>
+
+<!-- Right-Side Split-View Navigation Panel -->
+<aside id="rvSplitPanel" class="hidden" aria-label="Split screen navigation">
+ <div class="rv-split-head">
+  <div><small id="rvSplitCity">FALL RIVER</small><h3>Navigation</h3></div>
+  <div class="rv-split-actions">
+   <button id="rvFullMapBtn" title="Open full map & tours">Full Map</button>
+   <button id="rvCloseSplit" title="Return to fullscreen Reality View">×</button>
+  </div>
+ </div>
+ <div class="rv-split-map-wrap">
+  <canvas id="splitMapCanvas" width="460" height="520" aria-label="Tap map to set destination"></canvas>
+  <span class="rv-split-tip">Tap anywhere on map to navigate</span>
+ </div>
+ <div class="rv-split-quick">
+  <select id="rvQuickDest" aria-label="Quick destination"></select>
+  <button id="rvQuickGo" class="rv-primary-btn">Go</button>
+ </div>
+</aside>
+
+<!-- Hidden legacy header kept off-layout for semantic compatibility -->
+<header class="rv-hidden-header"><div class="brand"><span class="brandmark" data-city-short>FR</span><div><small>FSD v15</small><h1>TESLA<span> REALITY VIEW</span></h1></div></div></header>
+
+<div id="toast" role="status"></div>
+<div id="prompt"></div>
+
+<!-- Bottom Tesla Touchscreen Dock -->
+<div id="bottom">
+ <div class="minimap"><canvas id="mini" width="176" height="148"></canvas><div><b id="mode">REALITY VIEW</b><span>N ↑</span></div></div>
+
+ <nav id="rvDock" aria-label="Tesla Reality View controls">
+  <button id="pause" class="rv-dock-btn rv-car-btn" title="Vehicle & Settings (Esc)">
+   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l1.6-4.4A2.2 2.2 0 0 1 8.7 7.2h6.6a2.2 2.2 0 0 1 2.1 1.4L19 13m-15 0h16a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1a1.5 1.5 0 0 1-3 0H8a1.5 1.5 0 0 1-3 0H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+   <span>Car</span>
+  </button>
+  <button id="view" class="rv-dock-btn" title="Cycle Camera: Reality / Overhead / Cockpit (V)">
+   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.6-6 9-6 9 6 9 6-3.6 6-9 6-9-6-9-6z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.7" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+   <span id="viewLabel">Reality</span>
+  </button>
+  <button id="rvOverheadBtn" class="rv-dock-btn" title="Toggle Overhead Bird's-Eye View (B)">
+   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2.5"/><path d="M12 7l3 8-3-1.8L9 15l3-8z" fill="currentColor"/></svg>
+   <span>Overhead</span>
+  </button>
+  <button id="autoButton" class="rv-dock-btn rv-auto-btn" title="Engage / Cancel FSD Auto Drive (F)">
+   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M3.8 10.5h16.4M12 14v6.5" stroke="currentColor" stroke-width="1.8"/></svg>
+   <span id="autoLabel">FSD v15</span>
+  </button>
+  <button id="rvSplitBtn" class="rv-dock-btn" title="Toggle Split Map View (M)">
+   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M14 4.5v15" stroke="currentColor" stroke-width="1.7"/></svg>
+   <span>Split</span>
+  </button>
+  <button id="rvQuietBtn" class="rv-dock-btn" title="Toggle Quiet Mode (Q)">
+   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 14.5A7.5 7.5 0 0 1 9.5 4.5a7.5 7.5 0 1 0 10 10z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+   <span>Quiet</span>
+  </button>
+  <button id="rvSplatBtn" class="rv-dock-btn" title="Toggle 3D Gaussian Splat City (X) · or drop a .splat file">
+   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="9" r="3" fill="currentColor" opacity="0.85"/><circle cx="15.5" cy="8.5" r="2.2" fill="currentColor" opacity="0.65"/><circle cx="12.5" cy="15.5" r="3.4" fill="currentColor" opacity="0.9"/><circle cx="6.5" cy="16" r="1.7" fill="currentColor" opacity="0.55"/><circle cx="18" cy="14.5" r="1.9" fill="currentColor" opacity="0.6"/></svg>
+   <span id="rvSplatLabel">3DGS</span>
+  </button>
+  <div class="rv-dock-sep"></div>
+  <button id="rvTimeBtn" class="rv-dock-btn" title="Skip time 3 hours (N)">
+   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+   <span>Sky</span>
+  </button>
+  <button id="highwayButton" class="rv-dock-btn" title="Jump to mapped highway access">I-195</button>
+  <button id="cityButton" class="rv-dock-btn" title="Choose another city">Cities</button>
+  <button id="home" class="rv-dock-btn" title="Return to downtown">⌂</button>
+  <button id="sound" class="rv-dock-btn" title="Toggle driving audio">Sound</button>
+  <button id="fullscreen" class="rv-dock-btn" title="Full screen">⛶</button>
+  <div class="rv-dock-sep"></div>
+  <div class="rv-climate" aria-hidden="true"><span>68°</span></div>
+ </nav>
+
+ <div class="clock">
+  <span id="boostStatus">BOOST READY</span>
+  <progress id="boostCharge" max="1" value="1" aria-label="Boost charge"></progress>
+  <small id="speed">0 MPH</small>
+  <b id="time">09:30</b>
+  <span id="clockCity">FALL RIVER · DAYLIGHT</span>
+ </div>
+</div>
+
+<div id="touch"><div id="joystick"><i></i></div><div class="touch-actions"><button id="runTouch">RUN</button><button id="boostTouch" aria-label="Hold for acceleration boost">BOOST</button><button id="gearTouch" aria-label="Change drive direction">D</button><button id="brakeTouch" aria-label="Hold to brake">BRAKE</button><button id="accelerateTouch" aria-label="Hold to accelerate">GO</button><button id="interactTouch">DRIVE</button></div></div>
+
+<!-- Start Screen Overlay -->
+<div id="start" class="overlay">
+ <section class="intro">
+  <div class="rv-hero-badge"><span class="rv-pulse-dot"></span><span>TESLA FSD v15 · REALITY VIEW</span></div>
+  <small id="welcome">WELCOME TO FALL RIVER</small>
+  <h2>Reality View.<br>Your streets.</h2>
+  <p id="introCopy">Real Fall River streets rendered in live 3D.<br>Follow sky-blue FSD path ribbons, AR sky chevrons, and tap any road to go.</p>
+  <button id="play" disabled>Initializing Reality View…</button>
+  <button class="start-city" id="startCityButton">Choose a different city</button>
+  <div class="intro-help" id="loadStatus">Building neural city geometry…</div>
+  <div class="intro-help">Click/Tap any road to navigate · V camera · B overhead · M split map · Q quiet mode</div>
+  <div class="intro-help" id="padHint" aria-live="polite">Controller: connect and press a button · A start · D-pad menus</div>
+  <footer>SPINDLE CITY · FSD v15 REALITY VIEW EDITION<br><span>Reference-based landmarks · Real mapped streets</span><span class="model-credit">Model Y: <a href="https://sketchfab.com/3d-models/tesla-model-y-2021-c0a86cac582d4b33aba0fb1b1912d970" target="_blank" rel="noopener">“Tesla Model Y 2021”</a> by <a href="https://sketchfab.com/763468712" target="_blank" rel="noopener">763468712</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · modified</span></footer>
+ </section>
+</div>
+
+<!-- Full Map & Driving Display Modal -->
+<div id="mapOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="mapTitle">
+ <section class="mapPanel">
+  <div class="maphead">
+   <div><small id="mapTitle">FALL RIVER · FSD v15</small><h2>Reality View &amp; Navigation</h2></div>
+   <div class="map-tabs"><button id="mapViewToggle">Street map</button><button id="closeMap" aria-label="Close map">Close ×</button></div>
+  </div>
+  <div class="tesla-map-layout">
+   <div class="fsd-stage"><canvas id="bigmap" width="800" height="650" aria-label="Live driving visualization"></canvas><p class="map-caption">Live road geometry · surrounding vehicles · FSD v15 sky-blue route</p></div>
+   <div class="tesla-route-panel">
+    <section class="auto-route"><h3>Navigate</h3><label for="autoDestination">Choose a destination</label><select id="autoDestination"></select><button id="startAuto">Start FSD Auto Drive</button><p>Or click any street directly in 3D Reality View for Tap-to-Go.</p><p id="autoStatus" role="status"></p></section>
+    <h3 class="tour-title">Explore landmarks</h3>
+    <div id="architectureTour"></div>
+    <div id="placeList"></div>
+    <button id="reset">Reset exploration progress</button>
+    <button class="city-link" id="mapCityButton">Change city</button>
+   </div>
+  </div>
+ </section>
+</div>
+
+<div id="cityOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="cityHeading">
+ <section class="cityPanel">
+  <small>SEPARATE DESTINATIONS</small>
+  <h2 id="cityHeading">Choose a city.</h2>
+  <p>Fall River and New Bedford are separate real-map play spaces. Selecting one reloads the destination.</p>
+  <div id="cityChoices"></div>
+  <button id="closeCities">Stay in this city</button>
+ </section>
+</div>
+
+<div id="pauseOverlay" class="overlay hidden">
+ <section class="pausePanel">
+  <small>MODEL Y · FSD v15 CONTROLS</small>
+  <h2>Parked.</h2>
+  <p>Your discoveries are saved on this device, separately for each city.</p>
+  <label class="graphics-label">Graphics <select id="graphicsPreset"><option value="auto">Auto · optimized for your device</option><option value="high">High · lighting and ambient occlusion</option><option value="mobile">iPhone · battery saver</option><option value="balanced">Balanced · lighter rendering</option></select></label>
+  <p>Shortcuts: <b>Click 3D road</b> Tap-to-Go · <b>V</b> Reality / Overhead / Cockpit · <b>B</b> Bird's-Eye · <b>M</b> Split Map · <b>Q</b> Quiet Mode · <b>N</b> Sky time · <b>C</b> Hide HUD.</p>
+  <section class="pad-help" aria-labelledby="padHelpTitle">
+   <h3 id="padHelpTitle">CONTROLLER</h3>
+   <p id="padStatus" role="status" aria-live="polite">No controller detected · connect one and press a button</p>
+   <ul class="pad-legend"><li><b>L stick</b> move / steer</li><li><b>R stick</b> look</li><li><b>RT</b> accelerate</li><li><b>LT</b> brake, hold at stop to reverse</li><li><b>A / ✕</b> interact · confirm</li><li><b>B / ○</b> close · back</li><li><b>X / □</b> camera view</li><li><b>Y / △</b> map</li><li><b>L3</b> sprint · L stick forward boosts</li><li><b>Start</b> pause · resume</li><li><b>D-pad</b> menu focus · ◀ ▶ change list</li></ul>
+  </section>
+  <button id="resume">Resume Reality View</button>
+  <p class="model-credit">Model Y: <a href="https://sketchfab.com/3d-models/tesla-model-y-2021-c0a86cac582d4b33aba0fb1b1912d970" target="_blank" rel="noopener">“Tesla Model Y 2021”</a> by <a href="https://sketchfab.com/763468712" target="_blank" rel="noopener">763468712</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · modified</p>
+ </section>
+</div>
+
+<script src="assets/city-map.js"></script><script src="cities.js"></script><script src="geography.js"></script><script type="module" src="entry3d.js"></script><script src="app.js" defer></script><a class="attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Map data © OpenStreetMap contributors · ODbL</a></body></html>

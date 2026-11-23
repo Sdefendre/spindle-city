@@ -1,0 +1,40 @@
+[
+  {
+    "files": [
+      "door-open.m4a",
+      "door-close.m4a"
+    ],
+    "author": "looneybits",
+    "license": "CC0",
+    "source": "https://opengameart.org/content/cardoorsfx"
+  },
+  {
+    "files": [
+      "traffic-pass.m4a"
+    ],
+    "author": "Yaroslav_Novikov",
+    "license": "CC0",
+    "source": "https://opengameart.org/content/car-1-1"
+  },
+  {
+    "files": [
+      "tire-skid.m4a"
+    ],
+    "author": "audible-edge (Tom Haigh), loop by qubodup",
+    "license": "CC-BY-3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
+    "source": "https://opengameart.org/content/car-tire-squeal-skid-loop",
+    "changes": "Converted to mono AAC, 44.1 kHz, 96 kbps. Runtime gain and filtering follow car motion."
+  },
+  {
+    "files": [
+      "tesla-reverse.m4a"
+    ],
+    "title": "Tesla Back up",
+    "author": "itinerantmonk108",
+    "license": "CC0-1.0",
+    "source": "https://freesound.org/people/itinerantmonk108/sounds/745146/",
+    "downloadVariant": "Public HQ preview, recorded on iPhone 12",
+    "changes": "Trimmed to a 3.25 second loop, short fades, converted to mono AAC. Runtime gain and playback rate follow reversing."
+  }
+]
