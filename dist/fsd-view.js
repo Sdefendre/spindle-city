@@ -42,7 +42,7 @@ export function drawNavigation(c,w,h,{player,Geo,places=[],found=new Set(),route
  const range=full?Math.max(Geo.W,Geo.H*w/h):520,scale=w/range,ox=full?(w-Geo.W*scale)/2:w/2-player.x*scale,oy=full?(h-Geo.H*scale)/2:h/2-player.y*scale;
  const poly=(points,fill,stroke=null,width=1)=>{c.beginPath();points.forEach((p,i)=>i?c.lineTo(ox+p[0]*scale,oy+p[1]*scale):c.moveTo(ox+p[0]*scale,oy+p[1]*scale));if(fill){c.closePath();c.fillStyle=fill;c.fill()}if(stroke){c.strokeStyle=stroke;c.lineWidth=width;c.stroke()}};
  for(const water of Geo.waterAll)poly(water.p,'#c0d8eb');for(const park of Geo.areas)poly(park.p,'#d4e2d0');
- for(const r of Geo.roads){poly(r.p,null,'#ccd1d5',Math.max(1,r.width*scale+2));poly(r.p,null,'#fff',Math.max(.7,r.width*scale));}
+ for(const r of Geo.roads){if(ox+r.box.r*scale<0||ox+r.box.x*scale>w||oy+r.box.b*scale<0||oy+r.box.y*scale>h)continue;poly(r.p,null,'#ccd1d5',Math.max(1,r.width*scale+2));poly(r.p,null,'#fff',Math.max(.7,r.width*scale));}
  for(const b of Geo.buildings){if(ox+b.box.r*scale<0||ox+b.box.x*scale>w||oy+b.box.b*scale<0||oy+b.box.y*scale>h)continue;poly(b.p,'#d5d8dc');}
  if(route?.points?.length)poly(route.points.map(p=>[p.x,p.y]),null,'#1878ec',Math.max(2,w*.007));
  for(const p of places){const x=ox+p.x*scale,y=oy+p.y*scale;c.fillStyle=found.has(p.name)?'#71867a':'#303841';c.beginPath();c.arc(x,y,full?4:2.5,0,7);c.fill();if(full){c.font='500 10px -apple-system,Arial';c.fillText(p.name,Math.max(4,Math.min(w-160,x+7)),y-7);}}
