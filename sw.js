@@ -1,6 +1,6 @@
 // Tesla City Drive service worker. Bump VERSION on every release so clients see an update.
 // Only Cache Storage entries with this app's prefix are touched; localStorage saves are never affected.
-const PREFIX='tesla-city-drive-',VERSION='20261123-3';
+const PREFIX='tesla-city-drive-',VERSION='20261123-4';
 const SHELL_CACHE=PREFIX+'shell-'+VERSION,ASSET_CACHE=PREFIX+'assets-'+VERSION;
 const SCOPE=self.registration.scope,INDEX=new URL('./index.html',SCOPE).href;
 // Small core shell only. Models, maps and audio are fetched lazily, so the game is not fully offline.

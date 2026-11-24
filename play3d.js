@@ -7,7 +7,7 @@ import {createPedestrians} from './pedestrians.js';
 import {createNPC} from './npc-model.js';
 import {planRoadRoute} from './route-planner.js';
 import {addFallRiverLandmarks} from './fall-river-landmarks.js';
-import {createPadState,readPad,getPads,requireNeutral,mergeAxis} from './gamepad.js';
+import {createPadState,readPad,getPads,requireNeutral,mergeAxis,rumblePad} from './gamepad.js';
 import {createPlayerDriving} from './player-car.js';
 import {createDriveFeel,SHAKE_HIT,HARD_HIT} from './drive-feel.js';
 import {placeTrafficCar,updateTraffic} from './traffic.js';
@@ -282,7 +282,8 @@ addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
 addEventListener('blur',()=>{inputFocused=false;haltForSafety()});
 addEventListener('focus',()=>{inputFocused=true;requireNeutral(padState)});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)haltForSafety()});document.addEventListener('app-pausing',haltForSafety);
-addEventListener('gamepaddisconnected',e=>{if(e.gamepad?.index===padState.index){haltForSafety();toast('Controller disconnected · game paused')}});
+addEventListener('gamepadconnected',()=>{requireNeutral(padState)});
+addEventListener('gamepaddisconnected',e=>{if(e.gamepad?.index===padState.index){document.body.classList.remove('pad-active');haltForSafety();toast('Controller disconnected · touch controls restored')}});
 document.addEventListener('click',e=>{const b=e.target instanceof Element&&e.target.closest('button');if(b&&e.detail>0&&!b.closest('.overlay'))b.blur()});
 addEventListener('pointerdown',()=>document.body.classList.remove('pad-nav'));
 
@@ -337,7 +338,7 @@ function update(dt){
  const pf=padFrame;padLookHold=Math.max(0,padLookHold-dt);
  if(pf.driveInput){side=mergeAxis(side,pf.move.x);forward=mergeAxis(forward,vehicle?pf.throttle-pf.reverse:-pf.move.y)}
  const padBrake=vehicle?Math.max(pf.brake,touchBrake):0;
- const boostRequested=!!vehicle&&(pf.move.y<-.78||keys.shift||touchBoost>0)&&padBrake<.05&&forward>=0&&(vehicle.velocity||0)>-.1;
+ const boostRequested=!!vehicle&&(pf.boost||pf.move.y<-.78||keys.shift||touchBoost>0)&&padBrake<.05&&forward>=0&&(vehicle.velocity||0)>-.1;
  let boosting=false;
  if(vehicle){vehicle.boostCharge??=1;if(!boostRequested)vehicle.boostLock=false;if(boostRequested&&!vehicle.boostLock&&vehicle.boostCharge>0){boosting=true;vehicle.boostCharge=Math.max(0,vehicle.boostCharge-dt/2.8);if(!vehicle.boostCharge)vehicle.boostLock=true;forward=1}else vehicle.boostCharge=Math.min(1,vehicle.boostCharge+dt/9);}
  const turn=(keys.arrowleft?1:0)-(keys.arrowright?1:0);yaw+=turn*dt*1.6;let moving=false,running=!!keys.shift||touchRun||pf.sprint;
@@ -377,7 +378,7 @@ function update(dt){
    const brake=keys[' ']?1:padBrake>.02?padBrake:0,throttle=brake?0:forward,r=playerDriving.step(v,{throttle,steer:side,brake,maxSpeed:cap,boost:boosting},dt,cars);
    player.x=v.x;player.y=v.y;moving=r.travel>.0001;
    v.drive={speed:v.velocity,acceleration:r.acceleration,lateral:r.lateral,impact:r.impact,collision:r.collision,braking:brake>0||throttle<0&&v.velocity>.05||throttle>0&&v.velocity<-.05,reversing:v.velocity<-.05,auto:false};
-   if(r.impact>SHAKE_HIT){driveFeel.impact(r.impact);audioEngine.event('impact',r.impact)}
+   if(r.impact>SHAKE_HIT){driveFeel.impact(r.impact);audioEngine.event('impact',r.impact);const mag=Math.min(1,r.impact/14);rumblePad(padState,mag,mag*0.7,r.impact>=HARD_HIT?240:110)}
    if(r.impact>=HARD_HIT&&elapsed-lastHardHit>1.5){lastHardHit=elapsed;toast('Hard hit · '+(r.collision==='boundary'?'blocked':r.collision||'obstacle')+' · '+Math.round(r.impact*2.237)+' MPH')}
   }
   v.x=player.x;v.y=player.y;player.heading=v.heading;v.root.userData.updateWheels?.(v.velocity||0,v.steer||0,dt);driveFeel.updateCar(v,dt);
@@ -502,10 +503,26 @@ function updatePadStatus(){const key=padFrame.status+'|'+padFrame.id;if(key===pa
  if(padFrame.status==='unsupported'&&padWarned!==padFrame.id){padWarned=padFrame.id;toast('Controller not supported: non-standard mapping')}}
 function pollPad(dt){const menu=activeOverlay();if(menu!==padMenu){padMenu=menu;requireNeutral(padState)}
  padFrame=readPad(padState,getPads(),{speed:vehicle?.velocity||0});
- if(padFrame.disconnected){haltForSafety();toast('Controller disconnected · game paused')}else if(padFrame.connected)toast('Controller connected · Start pauses · A interacts');
+ document.body.classList.toggle('pad-active',padFrame.status==='active');
+ if(padFrame.disconnected){haltForSafety();toast('Controller disconnected · touch controls restored')}
+ else if(padFrame.connected){
+  const ps=padFrame.isPlayStation;
+  toast(ps?'PS5 DualSense connected · R2 gas · L2 brake/rev · L1 FSD · R1 boost · ✕ interact':'Controller connected · RT gas · LT brake/rev · LB FSD · RB boost · A interact');
+  rumblePad(padState,0.22,0.35,120);
+ }
  updatePadStatus();if(document.hidden||!inputFocused||padFrame.status!=='active')return;
  const p=padFrame.pressed;if(menu){navigateMenu(menu,p);padFrame=readPad(createPadState(),[]);return}
- if(p.pause){pause();return}if(p.map){toggleSplit();return}if(p.view)setView();if(p.confirm)interact();
+ if(p.pause){pause();return}
+ if(p.map){toggleSplit();return}
+ if(p.view)setView();
+ if(p.confirm)interact();
+ if(p.lb)engageOrToggleFsd();
+ if(p.up)toggleRain();
+ if(p.right)window.dispatchEvent(new KeyboardEvent('keydown',{key:'n',bubbles:true}));
+ if(p.down)toggleOverhead();
+ if(p.left)toggleQuiet();
+ if(p.select)cycleSplatMode();
+ if(p.r3){yaw=player.heading-Math.PI;pitch=0;padLookHold=0;}
  const l=padFrame.look;if(l.x||l.y){yaw-=l.x*2.6*dt;pitch=Math.max(-.65,Math.min(.7,pitch+l.y*1.5*dt));padLookHold=1.5}}
 
 let ready=false;

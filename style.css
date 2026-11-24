@@ -509,6 +509,7 @@ body.split-view #extrasHud{display:none!important}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 .tiles-box{margin:12px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);text-align:left}
+body.pad-active #touch{display:none!important}
 #rvDock{gap:2px;padding:6px 10px}
 .rv-dock-btn{padding:6px 8px}
 .tiles-box h3{margin:0 0 8px;font-size:10px;letter-spacing:1.4px;color:#7cc8ff;font-weight:700}
