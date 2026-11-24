@@ -241,6 +241,9 @@ export function createRealityView(scene, Geo) {
  const leftZ = new Float32Array(MAX_RIBBON_SEGS + 1);
  const rightX = new Float32Array(MAX_RIBBON_SEGS + 1);
  const rightZ = new Float32Array(MAX_RIBBON_SEGS + 1);
+ const leftY = new Float32Array(MAX_RIBBON_SEGS + 1);
+ const rightY = new Float32Array(MAX_RIBBON_SEGS + 1);
+ const gy = (x, z) => (Geo.groundY ? Geo.groundY(x, z) : 0);
 
  function buildRibbon(count, halfWidth) {
   if (count < 2) {
@@ -274,10 +277,11 @@ export function createRealityView(scene, Geo) {
    leftZ[i] = scratchPts[i].z + nz * w;
    rightX[i] = scratchPts[i].x - nx * w;
    rightZ[i] = scratchPts[i].z - nz * w;
+   leftY[i] = 0.175 + gy(leftX[i], leftZ[i]);
+   rightY[i] = 0.175 + gy(rightX[i], rightZ[i]);
   }
 
   let pi = 0, ui = 0;
-  const y = 0.165;
   for (let i = 1; i < n; i++) {
    const v0 = scratchDists[i - 1] / total;
    const v1 = scratchDists[i] / total;
@@ -286,13 +290,13 @@ export function createRealityView(scene, Geo) {
    const cx = leftX[i], cz = leftZ[i];
    const dx = rightX[i], dz = rightZ[i];
    // tri 1: a, b, c
-   posArray[pi++] = ax; posArray[pi++] = y; posArray[pi++] = az;
-   posArray[pi++] = bx; posArray[pi++] = y; posArray[pi++] = bz;
-   posArray[pi++] = cx; posArray[pi++] = y; posArray[pi++] = cz;
+   posArray[pi++] = ax; posArray[pi++] = leftY[i - 1]; posArray[pi++] = az;
+   posArray[pi++] = bx; posArray[pi++] = rightY[i - 1]; posArray[pi++] = bz;
+   posArray[pi++] = cx; posArray[pi++] = leftY[i]; posArray[pi++] = cz;
    // tri 2: b, d, c
-   posArray[pi++] = bx; posArray[pi++] = y; posArray[pi++] = bz;
-   posArray[pi++] = dx; posArray[pi++] = y; posArray[pi++] = dz;
-   posArray[pi++] = cx; posArray[pi++] = y; posArray[pi++] = cz;
+   posArray[pi++] = bx; posArray[pi++] = rightY[i - 1]; posArray[pi++] = bz;
+   posArray[pi++] = dx; posArray[pi++] = rightY[i]; posArray[pi++] = dz;
+   posArray[pi++] = cx; posArray[pi++] = leftY[i]; posArray[pi++] = cz;
 
    uvArray[ui++] = 0; uvArray[ui++] = v0;
    uvArray[ui++] = 1; uvArray[ui++] = v0;
@@ -352,7 +356,12 @@ export function createRealityView(scene, Geo) {
  function pickRoadAtScreen(clientX, clientY, camera) {
   ndc.set((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return null;
+  let gh = gy(camera.position.x, camera.position.z);
+  for (let it = 0; it < 5; it++) {
+   groundPlane.constant = -gh;
+   if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return null;
+   gh = gy(hitPoint.x, hitPoint.z);
+  }
   const mx = hitPoint.x / S;
   const my = hitPoint.z / S;
   if (mx < 0 || my < 0 || mx > Geo.W || my > Geo.H) return null;
@@ -382,7 +391,7 @@ export function createRealityView(scene, Geo) {
   // Soft feathered radial glow under the Model Y only when driving with FSD
   egoHalo.visible = !!vehicle && !firstPerson && engaged;
   if (egoHalo.visible) {
-   egoHalo.position.set(px, 0.11, pz);
+   egoHalo.position.set(px, 0.11 + gy(px, pz), pz);
    egoGlowMat.opacity = 0.55 + 0.12 * Math.sin(time * 2.4);
   }
 
@@ -430,7 +439,7 @@ export function createRealityView(scene, Geo) {
   if (hasRoute) {
    const dest = route.points[route.points.length - 1];
    destGroup.visible = true;
-   destGroup.position.set(dest.x * S, 0, dest.y * S);
+   destGroup.position.set(dest.x * S, gy(dest.x * S, dest.y * S), dest.y * S);
    const pulse = 1 + 0.16 * Math.sin(time * 3.0);
    ringOuter.scale.setScalar(pulse);
    ringOuterMat.opacity = 0.42 + 0.30 * (0.5 + 0.5 * Math.sin(time * 3.0));
@@ -442,7 +451,7 @@ export function createRealityView(scene, Geo) {
     const anchor = maneuver.dir !== 0 ? maneuver.point : route.points[Math.min(route.points.length - 1, (route.index || 0) + 12)];
     turnChevron.material.map = maneuver.dir > 0 ? texRight : maneuver.dir < 0 ? texLeft : texForward;
     const h = maneuver.dir !== 0 ? 9.2 : 7.8;
-    turnChevron.position.set(anchor.x * S, h + Math.sin(time * 2.8) * 0.4, anchor.y * S);
+    turnChevron.position.set(anchor.x * S, h + gy(anchor.x * S, anchor.y * S) + Math.sin(time * 2.8) * 0.4, anchor.y * S);
     const dWorld = Math.hypot(anchor.x * S - px, anchor.y * S - pz);
     const sc = Math.max(4.4, Math.min(8.5, 3.6 + dWorld * 0.045));
     turnChevron.scale.set(sc, sc, 1);

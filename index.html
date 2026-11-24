@@ -112,6 +112,10 @@
    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
    <span>Sky</span>
   </button>
+  <button id="rvRainBtn" class="rv-dock-btn" title="Toggle Rain & Wet Puddle Reflections (R)">
+   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 14.5a4 4 0 0 1 .4-8 5.2 5.2 0 0 1 10.1 1.4 3.4 3.4 0 0 1 .5 6.6H6.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.5 17.5l-1 2.8M12.5 17.5l-1 2.8M16.5 17.5l-1 2.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+   <span>Rain</span>
+  </button>
   <button id="highwayButton" class="rv-dock-btn" title="Jump to mapped highway access">I-195</button>
   <button id="cityButton" class="rv-dock-btn" title="Choose another city">Cities</button>
   <button id="home" class="rv-dock-btn" title="Return to downtown">⌂</button>
@@ -185,7 +189,15 @@
   <h2>Parked.</h2>
   <p>Your discoveries are saved on this device, separately for each city.</p>
   <label class="graphics-label">Graphics <select id="graphicsPreset"><option value="auto">Auto · optimized for your device</option><option value="high">High · lighting and ambient occlusion</option><option value="mobile">iPhone · battery saver</option><option value="balanced">Balanced · lighter rendering</option></select></label>
-  <p>Shortcuts: <b>Click 3D road</b> Tap-to-Go · <b>V</b> Reality / Overhead / Cockpit · <b>B</b> Bird's-Eye · <b>M</b> Split Map · <b>Q</b> Quiet Mode · <b>N</b> Sky time · <b>C</b> Hide HUD.</p>
+  <section class="tiles-box" aria-labelledby="tilesTitle">
+   <h3 id="tilesTitle">GOOGLE PHOTOREALISTIC 3D TILES (OPTIONAL)</h3>
+   <div class="tiles-row">
+    <input id="gmapsKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Google Maps Map Tiles API key (stored locally)">
+    <button id="gmapsTilesToggle" type="button">Enable 3D Tiles</button>
+   </div>
+   <p id="gmapsTilesStatus" role="status">Paste a Google Maps Map Tiles API key to stream real photogrammetric buildings over local driving physics.</p>
+  </section>
+  <p>Shortcuts: <b>Click 3D road</b> Tap-to-Go · <b>V</b> Reality / Overhead / Cockpit · <b>B</b> Bird's-Eye · <b>M</b> Split Map · <b>Q</b> Quiet Mode · <b>R</b> Rain &amp; Wet Asphalt · <b>N</b> Sky time · <b>C</b> Hide HUD.</p>
   <section class="pad-help" aria-labelledby="padHelpTitle">
    <h3 id="padHelpTitle">CONTROLLER</h3>
    <p id="padStatus" role="status" aria-live="polite">No controller detected · connect one and press a button</p>

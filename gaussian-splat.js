@@ -359,6 +359,7 @@ export function createGaussianSplatCity(scene, Geo, focusMapPos = null) {
   return { mesh, count };
  }
 
+ for (let i = 0; i < centers.length; i += 3) centers[i + 1] += (Geo.groundY ? Geo.groundY(centers[i], centers[i + 2]) : 0);
  const { mesh: citySplatMesh, count: splatCount } = buildMesh(centers, axesU, axesV, colors);
  root.add(citySplatMesh);
 

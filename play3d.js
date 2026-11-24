@@ -16,10 +16,14 @@ import {drawDrivingDisplay,drawNavigation} from './fsd-view.js';
 import {createPedestrianPhysics} from './pedestrian-physics.js';
 import {createRealityView} from './reality-view.js';
 import {createGaussianSplatCity} from './gaussian-splat.js';
+import {createParkedCars} from './parked-cars.js';
+import {createPhotorealTiles} from './photoreal-tiles.js';
 
 const isMobile=matchMedia('(pointer:coarse)').matches;
 const $=id=>document.getElementById(id),canvas=$('game'),config=window.activeCity,Geo=window.Geo;let city;
+const gy=(x,z)=>Geo.groundY?Geo.groundY(x,z):0;
 try{city=buildCity(canvas,Geo)}catch(e){$('play').disabled=true;$('play').textContent='3D graphics unavailable';$('loadStatus').textContent='This view needs WebGL 2. Open the game in a current browser with hardware acceleration enabled.';throw e}
+city.updateSignals?.(0);
 
 const {renderer,scene,cityGroup,camera,sun}=city,character=makeDetailedCharacter(scene),mini=$('mini').getContext('2d'),S=1/1.5,KEY=config.id==='fall-river'?'spindle-city-real-map-v2':'spindle-city-real-map-v3:'+config.id;
 const presentation=makePresentation(renderer,scene,camera),cockpit=makeCockpit(scene,camera),playerDriving=createPlayerDriving(Geo,city),driveFeel=createDriveFeel(camera);let lastHardHit=-9;
@@ -54,8 +58,52 @@ const civilianModels=['womanCasual','manWorkwear','manJacket'];
 crowd.nearest(player,isMobile?1:3).forEach((person,i)=>crowd.replaceCharacter(person,(world,p)=>createNPC(world,{variant:civilianModels[i],fallbackVariant:p.variant})));
 crowd.update(0,0,player);
 const pedestrianPhysics=createPedestrianPhysics(scene,Geo,{mobile:isMobile});
+const parkedCars=createParkedCars(cityGroup,Geo,spawn,city.propColliders,isMobile?95:170);
 const splatCity=createGaussianSplatCity(scene,Geo,spawn);
+const photorealTiles=createPhotorealTiles(scene,Geo,config.id);
 const ray=new T.Raycaster(),target=new T.Vector3(),desired=new T.Vector3(),direction=new T.Vector3();
+
+// Lightweight falling rain streaks around the camera (single LineSegments draw call, zero per-frame allocations)
+let rainOn=false;
+const RAIN_COUNT=isMobile?420:900;
+const rainPos=new Float32Array(RAIN_COUNT*6);
+const rainDrops=Array.from({length:RAIN_COUNT},(_,i)=>({x:((i*73.13)%44)-22,y:((i*19.73)%22),z:((i*41.37)%44)-22,s:16+(i%7)*1.8}));
+const rainGeo=new T.BufferGeometry();rainGeo.setAttribute('position',new T.BufferAttribute(rainPos,3));
+const rainMat=new T.LineBasicMaterial({color:'#c6dcf0',transparent:true,opacity:0,depthWrite:false});
+const rainLines=new T.LineSegments(rainGeo,rainMat);rainLines.frustumCulled=false;rainLines.visible=false;scene.add(rainLines);
+function updateRain(dt,cx,cy,cz){
+ const targetWet=rainOn?1:0;
+ city.wetUniform.value+=(targetWet-city.wetUniform.value)*Math.min(1,dt*2.4);
+ const w=city.wetUniform.value;
+ rainLines.visible=w>0.03;
+ if(!rainLines.visible)return;
+ rainMat.opacity=w*0.36;
+ let pi=0;
+ for(let i=0;i<RAIN_COUNT;i++){
+  const d=rainDrops[i];
+  d.y-=d.s*dt;
+  if(d.y<0)d.y+=22;
+  const rx=cx+d.x,ry=cy+d.y,rz=cz+d.z;
+  rainPos[pi++]=rx;rainPos[pi++]=ry;rainPos[pi++]=rz;
+  rainPos[pi++]=rx+0.12;rainPos[pi++]=ry-0.85;rainPos[pi++]=rz+0.06;
+ }
+ rainGeo.attributes.position.needsUpdate=true;
+}
+function toggleRain(){
+ rainOn=!rainOn;
+ $('rvRainBtn')?.classList.toggle('active',rainOn);
+ toast(rainOn?'Rain & wet-asphalt puddle reflections on (R)':'Skies clearing · road drying');
+}
+function placeCarOnTerrain(c){
+ const cx=c.x*S,cz=c.y*S,cg=gy(cx,cz);
+ c.root.position.set(cx,.08+cg,cz);
+ c.root.rotation.order='YXZ';
+ const fx=Math.sin(c.heading),fz=Math.cos(c.heading);
+ const hf=gy(cx+fx*1.8,cz+fz*1.8),hb=gy(cx-fx*1.8,cz-fz*1.8);
+ const hr=gy(cx+fz*0.9,cz-fx*0.9),hl=gy(cx-fz*0.9,cz+fx*0.9);
+ c.root.rotation.set(-Math.atan2(hf-hb,3.6),c.heading,Math.atan2(hr-hl,1.8)*0.65);
+}
+for(const c of cars)placeCarOnTerrain(c);
 
 function save(){try{localStorage.setItem(KEY,JSON.stringify({found:[...found]}))}catch{}}
 function refresh(){const n=found.size,total=places.length;$('count').textContent=n+' / '+total;$('progressBar').style.width=n/Math.max(1,total)*100+'%';$('placeList').replaceChildren(...places.map(p=>{let s=document.createElement('span');s.className='place'+(found.has(p.name)?' found':'');s.textContent=(found.has(p.name)?'✓ ':'◇ ')+p.name;return s}))}refresh();
@@ -191,7 +239,27 @@ $('rvCloseSplit').onclick=()=>setSplitView(false);
 $('rvFullMapBtn').onclick=()=>{setSplitView(false);toggleMap()};
 $('rvQuietBtn').onclick=toggleQuiet;
 if($('rvSplatBtn'))$('rvSplatBtn').onclick=cycleSplatMode;
+if($('rvRainBtn'))$('rvRainBtn').onclick=toggleRain;
 $('rvTimeBtn').onclick=()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'n',bubbles:true}));
+if($('gmapsKeyInput')){
+ $('gmapsKeyInput').value=photorealTiles.apiKey;
+ photorealTiles.onStatus(msg=>{if($('gmapsTilesStatus'))$('gmapsTilesStatus').textContent=msg});
+ $('gmapsTilesToggle').onclick=async()=>{
+  if(photorealTiles.enabled){
+   photorealTiles.disable(cityGroup);
+   $('gmapsTilesToggle').classList.remove('active');
+   $('gmapsTilesToggle').textContent='Enable 3D Tiles';
+   toast('Switched back to local OSM + elevation meshes');
+  }else{
+   $('gmapsTilesToggle').disabled=true;
+   const ok=await photorealTiles.enable($('gmapsKeyInput').value,cityGroup);
+   $('gmapsTilesToggle').disabled=false;
+   $('gmapsTilesToggle').classList.toggle('active',ok);
+   $('gmapsTilesToggle').textContent=ok?'Disable 3D Tiles':'Enable 3D Tiles';
+   if(ok)toast('Google Photorealistic 3D Tiles streaming');
+  }
+ };
+}
 $('rvQuickGo').onclick=()=>{const p=places[Number($('rvQuickDest').value)];if(p)navigateToPoint(p,p.name)};
 $('startAuto').onclick=()=>{$('autoStatus').textContent='';const p=places[Number($('autoDestination').value)];if(!p){$('autoStatus').textContent='Choose a destination.';return}mapOpen=false;$('mapOverlay').classList.add('hidden');keys={};joy={x:0,y:0};navigateToPoint(p,p.name)};
 
@@ -209,7 +277,7 @@ $('splitMapCanvas').addEventListener('click',e=>{
 });
 $('mini').addEventListener('click',toggleSplit);
 
-addEventListener('keydown',e=>{const el=e.target instanceof Element?e.target:null;if(el?.closest('input,select,textarea,[contenteditable]:not([contenteditable="false"])'))return;if(el?.closest('button,a[href]')&&e.key!=='Escape')return;const menu=activeOverlay(),free=!menu;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();keys[e.key.toLowerCase()]=true;if(e.repeat)return;const k=e.key.toLowerCase();if(free&&k==='e')interact();if((free||menu===$('mapOverlay'))&&k==='m'){if(menu===$('mapOverlay'))toggleMap();else toggleSplit()}if(free&&k==='v')setView();if(free&&k==='b')toggleOverhead();if(free&&k==='q')toggleQuiet();if(free&&k==='x')cycleSplatMode();if(free&&k==='c'){document.body.classList.toggle('cinematic');toast('C · Show or hide the HUD')}if(free&&k==='f')engageOrToggleFsd();if(e.key==='Escape'){if(!$('cityOverlay').classList.contains('hidden'))closeCities();else if(mapOpen)toggleMap();else if(splitOpen)setSplitView(false);else pause()}});
+addEventListener('keydown',e=>{const el=e.target instanceof Element?e.target:null;if(el?.closest('input,select,textarea,[contenteditable]:not([contenteditable="false"])'))return;if(el?.closest('button,a[href]')&&e.key!=='Escape')return;const menu=activeOverlay(),free=!menu;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();keys[e.key.toLowerCase()]=true;if(e.repeat)return;const k=e.key.toLowerCase();if(free&&k==='e')interact();if((free||menu===$('mapOverlay'))&&k==='m'){if(menu===$('mapOverlay'))toggleMap();else toggleSplit()}if(free&&k==='v')setView();if(free&&k==='b')toggleOverhead();if(free&&k==='q')toggleQuiet();if(free&&k==='x')cycleSplatMode();if(free&&k==='r')toggleRain();if(free&&k==='c'){document.body.classList.toggle('cinematic');toast('C · Show or hide the HUD')}if(free&&k==='f')engageOrToggleFsd();if(e.key==='Escape'){if(!$('cityOverlay').classList.contains('hidden'))closeCities();else if(mapOpen)toggleMap();else if(splitOpen)setSplitView(false);else pause()}});
 addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
 addEventListener('blur',()=>{inputFocused=false;haltForSafety()});
 addEventListener('focus',()=>{inputFocused=true;requireNeutral(padState)});
@@ -263,6 +331,7 @@ function drawSplitMap(){if(!splitOpen)return;splitTransform=drawNavigation($('sp
 
 function update(dt){
  phase+=dt;elapsed+=dt;for(let u of city.waterSurfaces||[])u.value=elapsed;
+ city.updateSignals?.(elapsed);
  let forward=(keys.w||keys.arrowup?1:0)-(keys.s||keys.arrowdown?1:0)-joy.y,side=(keys.d?1:0)-(keys.a?1:0)+joy.x;
  if(vehicle)forward=mergeAxis(forward,touchThrottle*(touchReverse?-1:1));
  const pf=padFrame;padLookHold=Math.max(0,padLookHold-dt);
@@ -326,12 +395,14 @@ function update(dt){
   for(const sp of $('rvGear').children)sp.classList.toggle('active',sp.dataset.g==='P');
  }
 
- character.root.position.set(player.x*S,.08,player.y*S);character.root.rotation.y=player.heading;character.update(phase,moving,running);
- updateTraffic(Geo,cars,player,vehicle,dt);for(let c of cars){c.root.position.set(c.x*S,.08,c.y*S);c.root.rotation.y=c.heading}
+ character.root.position.set(player.x*S,.08+gy(player.x*S,player.y*S),player.y*S);character.root.rotation.y=player.heading;character.update(phase,moving,running);
+ updateTraffic(Geo,cars,player,vehicle,dt);for(let c of cars)placeCarOnTerrain(c);
+ updateRain(dt,player.x*S,gy(player.x*S,player.y*S),player.y*S);
+ photorealTiles.update(player.x*S,gy(player.x*S,player.y*S),player.y*S);
  crowd.update(phase,dt,player);const humanImpact=pedestrianPhysics.update(dt,vehicle,crowd.pedestrians,player);if(humanImpact){driveFeel.impact(humanImpact*.4);audioEngine.event('impact',humanImpact*.5)}
  const trafficNear=cars.filter(c=>c!==vehicle&&!c.parked).reduce((best,c)=>Math.min(best,Math.hypot((c.x-player.x)*S,(c.y-player.y)*S)),100);
  audioEngine.update({speed:vehicle?.velocity||0,throttle:forward,lateral:vehicle?.drive?.lateral||0,driving:!!vehicle,walking:!vehicle&&moving,running,nearTraffic:Math.max(0,1-trafficNear/35),inside:firstPerson&&!!vehicle,dt});
- nearest=null;for(const p of places){let d=Math.hypot(player.x-p.x,player.y-p.y);p.marker.rotation.y=phase;p.marker.position.y=2.7+Math.sin(phase*2)*.15;if(d<28){nearest=p;if(!found.has(p.name)){found.add(p.name);save();refresh();toast(found.size===places.length?'Every landmark discovered. Keep exploring!':p.name+' discovered · '+found.size+' / '+places.length)}}}
+ nearest=null;for(const p of places){let d=Math.hypot(player.x-p.x,player.y-p.y);p.marker.rotation.y=phase;p.marker.position.y=(p.marker.userData.gy||0)+2.7+Math.sin(phase*2)*.15;if(d<28){nearest=p;if(!found.has(p.name)){found.add(p.name);save();refresh();toast(found.size===places.length?'Every landmark discovered. Keep exploring!':p.name+' discovered · '+found.size+' / '+places.length)}}}
 
  // Update Tesla Reality View 3D ribbons + floating AR sky chevrons + 3D Gaussian Splat shader!
  splatCity.update(elapsed,city.nightUniform?.value||0,scene.fog?.color||null);
@@ -381,28 +452,29 @@ function positionCamera(dt){
  cockpit.update({...displayState(),visible:!!vehicle&&firstPerson&&vehicle.model==='White Tesla Model Y',speed:vehicle?.velocity||0,steer:vehicle?.steer||0,assist:!!autoRoute});
  if(vehicle)vehicle.root.visible=!firstPerson;
 
- const px=player.x*S,pz=player.y*S;
+ const px=player.x*S,pz=player.y*S,pg=gy(px,pz);
  const lookAhead=vehicle&&cameraMode==='reality'?4.5:0;
  const fx=Math.sin(player.heading)*lookAhead,fz=Math.cos(player.heading)*lookAhead;
- target.set(px+fx,vehicle?1.2:1.45,pz+fz);
+ target.set(px+fx,pg+(vehicle?1.2:1.45),pz+fz);
 
  if(firstPerson){
   character.root.visible=false;
   const offset=vehicle?-.32:0;
-  camera.position.set(px+Math.cos(vehicle?.heading||0)*offset,vehicle?1.25:1.75,pz-Math.sin(vehicle?.heading||0)*offset);
+  camera.position.set(px+Math.cos(vehicle?.heading||0)*offset,pg+(vehicle?1.25:1.75),pz-Math.sin(vehicle?.heading||0)*offset);
   camera.lookAt(camera.position.x-Math.sin(yaw)*10,camera.position.y-Math.sin(pitch)*8,camera.position.z-Math.cos(yaw)*10);
  }else if(cameraMode==='overhead'){
   // Reality View elevated bird's-eye virtual camera
   const hDist=14+chaseExtra*0.6;
-  desired.set(px+Math.sin(yaw)*hDist,28+pitch*6,pz+Math.cos(yaw)*hDist);
+  desired.set(px+Math.sin(yaw)*hDist,pg+28+pitch*6,pz+Math.cos(yaw)*hDist);
   if(cameraSnap){camera.position.copy(desired);cameraSnap=false}
   else camera.position.lerp(desired,1-Math.exp(-6.5*dt));
-  camera.lookAt(px+fx*1.4,0.6,pz+fz*1.4);
+  camera.lookAt(px+fx*1.4,pg+0.6,pz+fz*1.4);
  }else{
   // Signature FSD v15 Reality View elevated virtual third-person / drone camera ("GTA IRL")
   let dist=vehicle?Math.max(8.2,distance)+chaseExtra*.65:Math.min(6.2,distance),shoulder=vehicle?0:.4;
-  let camY=vehicle?(4.35+pitch*2.8):(2.25+pitch*2);
+  let camY=pg+(vehicle?(4.35+pitch*2.8):(2.25+pitch*2));
   desired.set(px+Math.sin(yaw)*dist+Math.cos(yaw)*shoulder,camY,pz+Math.cos(yaw)*dist-Math.sin(yaw)*shoulder);
+  desired.y=Math.max(desired.y,gy(desired.x,desired.z)+1.5);
   direction.copy(desired).sub(target);let len=direction.length();direction.normalize();
   ray.set(target,direction);ray.far=len;
   let hits=ray.intersectObjects(city.wallMeshes,false);
@@ -411,7 +483,7 @@ function positionCamera(dt){
   else camera.position.lerp(desired,1-Math.exp(-9.5*dt));
   camera.lookAt(target.x,target.y-pitch*7,target.z);
  }
- sun.position.set(px-65,90,pz-45);sun.target.position.set(px,0,pz);
+ sun.position.set(px-65,pg+90,pz-45);sun.target.position.set(px,pg,pz);
  driveFeel.end(dt);
 }
 
@@ -442,11 +514,11 @@ function frame(t){
  audioEngine.setActive(started&&!paused&&!mapOpen&&inputFocused&&!document.hidden&&$('cityOverlay').classList.contains('hidden'));
  if(mapOpen&&t-mapDrawTime>150){mapDrawTime=t;drawMap($('bigmap').getContext('2d'),800,650,true)}
  if(started&&!paused&&!mapOpen&&$('cityOverlay').classList.contains('hidden'))update(dt);
- else if(!started){character.root.position.set(player.x*S,.08,player.y*S);character.root.rotation.y=player.heading;character.update(t/1000,false,false);realityView.update(t/1000,{player,vehicle:null,route:null,assist:false,enabled:false,firstPerson:false,started:false})}
+ else if(!started){character.root.position.set(player.x*S,.08+gy(player.x*S,player.y*S),player.y*S);character.root.rotation.y=player.heading;character.update(t/1000,false,false);realityView.update(t/1000,{player,vehicle:null,route:null,assist:false,enabled:false,firstPerson:false,started:false})}
  if(!paused){positionCamera(dt);presentation.render(t/1000)}
  if(!ready){ready=true;$('play').disabled=false;$('play').innerHTML='Enter Reality View <span>↗</span>';$('loadStatus').textContent='Tap any street for FSD v15 Tap-to-Go · WASD manual drive';if(activeOverlay()===$('start')&&document.body.classList.contains('pad-nav'))focusMenu($('play'));$('game').dataset.ready='true'}
  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 // Day-night, GPS line and courier jobs live in extras.js; this context line is its only hook.
-import('./extras.js').then(m=>m.initExtras({Geo,scene,sun,T,toast,S,places,config,presentation,player,nightUniform:city.nightUniform,lampPoolMat:city.lampPoolMat,lampBulbMat:city.lampBulbMat,get vehicle(){return vehicle},get started(){return started},get paused(){return paused},get mapOpen(){return mapOpen}})).catch(e=>console.error('extras failed to load',e));
+import('./extras.js').then(m=>m.initExtras({Geo,scene,sun,T,toast,S,places,config,presentation,player,nightUniform:city.nightUniform,lampPoolMat:city.lampPoolMat,lampBulbMat:city.lampBulbMat,wetUniform:city.wetUniform,get vehicle(){return vehicle},get started(){return started},get paused(){return paused},get mapOpen(){return mapOpen}})).catch(e=>console.error('extras failed to load',e));

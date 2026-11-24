@@ -2,6 +2,7 @@ import * as T from './vendor/three.module.js';
 const S=1/1.5;
 
 export function addStreetDetail(scene,Geo=window.Geo){
+ const gy=(x,z)=>Geo.groundY?Geo.groundY(x,z):0;
  const batches=new Map(),colliders=[];
  function addBox(w,h,d,color,x,y,z,angle=0,extra={}){
   const key=color+(extra.emissive||'')+(extra.flat?'|f':'');
@@ -19,8 +20,12 @@ export function addStreetDetail(scene,Geo=window.Geo){
     items:[],
    });
   }
-  batches.get(key).items.push({x,y,z,angle,w,h,d});
+  batches.get(key).items.push({x,y:y+gy(x,z),z,angle,w,h,d});
  }
+
+ // Animated traffic signal lenses (red / amber / green) share one unlit instanced mesh.
+ const heads=[];
+ const hash=(a,b)=>{let h=(a*374761393+b*668265263)>>>0;h=((h^(h>>>13))*1274126177)>>>0;return (h^(h>>>16))>>>0};
 
  const junctions=new Map();
  for(let r of Geo.roads){
@@ -39,25 +44,27 @@ export function addStreetDetail(scene,Geo=window.Geo){
   for(let j=1;j<r.p.length;j++){
    let a=r.p[j-1],b=r.p[j],dx=(b[0]-a[0])*S,dz=(b[1]-a[1])*S,len=Math.hypot(dx,dz);
    if(len<5.2)continue;
-   // Trim curb ends back by 2.4m from every segment endpoint so curbs NEVER cut across intersecting streets!
+   // Trim curb ends back from every segment endpoint so curbs never cut across intersecting streets.
    const trim=Math.min(2.4,len*0.28);
    const usable=len-trim*2;
    if(usable<1.2)continue;
    let angle=Math.atan2(dx,dz),ux=dx/len,uz=dz/len,nx=-uz,nz=ux;
-   let mx=(a[0]+b[0])*S/2,mz=(a[1]+b[1])*S/2;
    for(let side of [-1,1]){
     let off=r.width*S/2+.14;
-    let px=mx+nx*off*side,pz=mz+nz*off*side;
-    // Check midpoint AND both endpoints against crossing roads
-    let p1x=px-ux*(usable*0.46),p1z=pz-uz*(usable*0.46);
-    let p2x=px+ux*(usable*0.46),p2z=pz+uz*(usable*0.46);
-    let blocked=false;
-    for(const [tx,tz] of [[px,pz],[p1x,p1z],[p2x,p2z]]){
-     let near=Geo.nearestRoad(tx/S,tz/S,true);
-     if(near.r.id!==r.id&&near.distance<near.r.width/2+1.2){blocked=true;break;}
+    // Curb is laid in <=8 m pieces so it hugs the terrain instead of floating over hills.
+    const pieces=Math.max(1,Math.ceil(usable/8)),pl=usable/pieces;
+    for(let k=0;k<pieces;k++){
+     const along=-len/2+trim+pl*(k+.5);
+     const px=(a[0]+b[0])*S/2+ux*along+nx*off*side,pz=(a[1]+b[1])*S/2+uz*along+nz*off*side;
+     const p1x=px-ux*pl*.46,p1z=pz-uz*pl*.46,p2x=px+ux*pl*.46,p2z=pz+uz*pl*.46;
+     let blocked=false;
+     for(const [tx,tz] of [[px,pz],[p1x,p1z],[p2x,p2z]]){
+      let near=Geo.nearestRoad(tx/S,tz/S,true);
+      if(near.r.id!==r.id&&near.distance<near.r.width/2+1.2){blocked=true;break;}
+     }
+     if(blocked)continue;
+     addBox(.22,.15,pl,'#b6b7ac',px,.09,pz,angle,{flat:true});
     }
-    if(blocked)continue;
-    addBox(.22,.15,usable,'#b6b7ac',px,.09,pz,angle,{flat:true});
    }
   }
   if(index%3)continue;
@@ -71,7 +78,7 @@ export function addStreetDetail(scene,Geo=window.Geo){
   for(let b=0;b<6;b++)addBox(.34,.012,.025,'#202d2d',gx,.091,gz+(b-2.5)*.09,angle,{flat:true});
  }
 
- // Crosswalk markings, stop bars, and realistic Traffic Signal Mast Arms at major multi-way junctions!
+ // Crosswalks, stop bars and signal mast arms at multi-way junctions.
  let crossCount=0,signalCount=0;
  for(const [k,rs] of junctions){
   if(rs.length<3||crossCount>170)continue;
@@ -79,6 +86,7 @@ export function addStreetDetail(scene,Geo=window.Geo){
   let names=new Set(rs.map(r=>r.name));
   if(names.size<2)continue;
   crossCount++;
+  const phase0=hash(x|0,y|0)%24;
   let seen=[];
   for(let r of rs){
    let atStart=Math.hypot(r.p[0][0]-x,r.p[0][1]-y)<3,other=atStart?r.p[1]:r.p.at(-2),dx=other[0]-x,dz=other[1]-y,len=Math.hypot(dx,dz);
@@ -88,36 +96,25 @@ export function addStreetDetail(scene,Geo=window.Geo){
    if(seen.some(a=>Math.abs(Math.sin(a-angle))<.1))continue;
    seen.push(angle);
    let roadHalf=r.width*S/2,forward=roadHalf+3.2;
-   // Zebra crosswalk stripes
    for(let b=-roadHalf+.55;b<roadHalf-.2;b+=1.1){
     let xx=x*S+dx*forward+dz*b,zz=y*S+dz*forward-dx*b;
     addBox(.48,.008,2.3,'#dbd9c8',xx,.086,zz,angle,{flat:true});
    }
-   // Crisp white stop bar behind crosswalk
    const stopFwd=forward+2.4;
    addBox(roadHalf*0.92,.008,.36,'#e4e2d5',x*S+dx*stopFwd+dz*(roadHalf*0.45),0.086,y*S+dz*stopFwd-dx*(roadHalf*0.45),angle,{flat:true});
 
-   // Traffic Signal Mast Arm on the right corner of major intersections (first 2 approaches)
    if(signalCount<75&&seen.length<=2){
     signalCount++;
     const poleOff=roadHalf+1.1;
     const px=x*S+dx*(roadHalf+1.4)+dz*poleOff;
     const pz=y*S+dz*(roadHalf+1.4)-dx*poleOff;
-    // Vertical steel pole
     addBox(.20,6.2,.20,'#2c3338',px,3.1,pz,angle,{metalness:.65,roughness:.45});
-    // Horizontal cantilevered mast arm overhanging lane
     const armLen=Math.min(5.2,roadHalf+1.4);
     const ax=px-dz*(armLen*0.5),az=pz+dx*(armLen*0.5);
     addBox(armLen,.16,.16,'#2c3338',ax,5.9,az,angle,{metalness:.65,roughness:.45});
-    // Signal housing box + glowing LED green/red lens!
     const hx=px-dz*(armLen*0.78),hz=pz+dx*(armLen*0.78);
     addBox(.36,1.02,.32,'#191d22',hx,5.32,hz,angle,{roughness:.5});
-    const isGreen=(seen.length%2===1);
-    addBox(.20,.20,.36,isGreen?'#2ef58b':'#ff3b30',hx,isGreen?5.02:5.62,hz,angle,{
-     emissive:isGreen?'#22ee7a':'#ff2d20',
-     emissiveIntensity:2.6,
-     roughness:.2,
-    });
+    heads.push({x:hx,z:hz,y:gy(hx,hz),angle,phase:(phase0+(seen.length%2)*12)%24,state:-1});
     colliders.push({x:px,z:pz,radius:.22});
    }
   }
@@ -138,5 +135,28 @@ export function addStreetDetail(scene,Geo=window.Geo){
   mesh.receiveShadow=true;
   scene.add(mesh);
  }
- return{colliders};
+
+ // Signal lenses: three per head (red top, amber middle, green bottom).
+ let lensMesh=null;
+ const OFF=new T.Color(.05,.055,.06),RED=new T.Color(3.4,.22,.16),AMBER=new T.Color(3.4,2.1,.18),GREEN=new T.Color(.2,3.0,1.1);
+ if(heads.length){
+  lensMesh=new T.InstancedMesh(new T.BoxGeometry(.2,.2,.36),new T.MeshBasicMaterial({color:'#ffffff',toneMapped:false}),heads.length*3);
+  heads.forEach((h,i)=>{for(let l=0;l<3;l++){o.position.set(h.x,h.y+5.62-l*.30,h.z);o.rotation.set(0,h.angle,0);o.scale.set(1,1,1);o.updateMatrix();lensMesh.setMatrixAt(i*3+l,o.matrix);lensMesh.setColorAt(i*3+l,OFF)}});
+  lensMesh.frustumCulled=false;scene.add(lensMesh);
+ }
+ // 24 s cycle per head: green 0-9.5, amber 9.5-12, red 12-24 (cross street runs 12 s out of phase).
+ function update(time){
+  if(!lensMesh)return;
+  let dirty=false;
+  for(let i=0;i<heads.length;i++){
+   const h=heads[i],t=(time+h.phase)%24,state=t<9.5?2:t<12?1:0; // 0 red, 1 amber, 2 green
+   if(state===h.state)continue;
+   h.state=state;dirty=true;
+   lensMesh.setColorAt(i*3,state===0?RED:OFF);
+   lensMesh.setColorAt(i*3+1,state===1?AMBER:OFF);
+   lensMesh.setColorAt(i*3+2,state===2?GREEN:OFF);
+  }
+  if(dirty&&lensMesh.instanceColor)lensMesh.instanceColor.needsUpdate=true;
+ }
+ return{colliders,update};
 }

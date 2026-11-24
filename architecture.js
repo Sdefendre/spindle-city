@@ -42,13 +42,13 @@ export function addArchitecture(scene,renderer,geo=window.Geo){
  function addWallWeathering(m,strength=0.22){
   m.onBeforeCompile=shader=>{
    shader.vertexShader=shader.vertexShader
-    .replace('#include <common>','#include <common>\nvarying vec3 vWallWorld;')
-    .replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvWallWorld=(modelMatrix*vec4(transformed,1.0)).xyz;');
+    .replace('#include <common>','#include <common>\nattribute float aLocalY;\nvarying vec3 vWallWorld;\nvarying float vLocalY;')
+    .replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvWallWorld=(modelMatrix*vec4(transformed,1.0)).xyz;\nvLocalY=aLocalY;');
    shader.fragmentShader=shader.fragmentShader
-    .replace('#include <common>','#include <common>\nvarying vec3 vWallWorld;\nfloat wNoise(vec2 p){return fract(sin(dot(floor(p),vec2(127.1,311.7)))*43758.5453);}')
+    .replace('#include <common>','#include <common>\nvarying vec3 vWallWorld;\nvarying float vLocalY;\nfloat wNoise(vec2 p){return fract(sin(dot(floor(p),vec2(127.1,311.7)))*43758.5453);}')
     .replace('#include <map_fragment>',`#include <map_fragment>
      // Soft sidewalk contact ambient occlusion (bottom 2.4m) + subtle macro grime variation
-     float groundAO = mix(${(1-strength).toFixed(2)}, 1.0, smoothstep(0.0, 2.4, vWallWorld.y));
+     float groundAO = mix(${(1-strength).toFixed(2)}, 1.0, smoothstep(0.0, 2.4, vLocalY));
      float macro = 0.90 + 0.16 * sin(vWallWorld.x * 0.17 + vWallWorld.z * 0.13) * cos(vWallWorld.y * 0.22);
      diffuseColor.rgb *= groundAO * macro;
     `);
@@ -58,15 +58,15 @@ export function addArchitecture(scene,renderer,geo=window.Geo){
  mat.stone.bumpMap=concrete;mat.stone.bumpScale=.03;
  mat.stone.onBeforeCompile=shader=>{
   shader.vertexShader=shader.vertexShader
-   .replace('#include <common>','#include <common>\nvarying vec3 vWallWorld;')
-   .replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvWallWorld=(modelMatrix*vec4(transformed,1.0)).xyz;');
+   .replace('#include <common>','#include <common>\nattribute float aLocalY;\nvarying vec3 vWallWorld;\nvarying float vLocalY;')
+   .replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvWallWorld=(modelMatrix*vec4(transformed,1.0)).xyz;\nvLocalY=aLocalY;');
   shader.fragmentShader=shader.fragmentShader
-   .replace('#include <common>','#include <common>\nvarying vec3 vWallWorld;')
+   .replace('#include <common>','#include <common>\nvarying vec3 vWallWorld;\nvarying float vLocalY;')
    .replace('#include <map_fragment>',`#ifdef USE_MAP
     vec4 surface = texture2D(map,vMapUv);
     diffuseColor *= mix(vec4(0.88,0.87,0.83,1.0),surface,0.24);
    #endif
-   float groundAO = mix(0.78, 1.0, smoothstep(0.0, 2.4, vWallWorld.y));
+   float groundAO = mix(0.78, 1.0, smoothstep(0.0, 2.4, vLocalY));
    diffuseColor.rgb *= groundAO;`);
  };
 
@@ -75,20 +75,21 @@ export function addArchitecture(scene,renderer,geo=window.Geo){
  mat.glass.onBeforeCompile=shader=>{
   shader.uniforms.uNight=nightUniform;
   shader.vertexShader=shader.vertexShader
-   .replace('#include <common>','#include <common>\nvarying vec3 vWinWorld;\nvarying vec3 vWinNorm;')
-   .replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvWinWorld=(modelMatrix*vec4(transformed,1.0)).xyz;\nvWinNorm=normalize(mat3(modelMatrix)*objectNormal);');
+   .replace('#include <common>','#include <common>\nattribute float aLocalY;\nvarying vec3 vWinWorld;\nvarying vec3 vWinNorm;\nvarying float vWinLocalY;')
+   .replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvWinWorld=(modelMatrix*vec4(transformed,1.0)).xyz;\nvWinNorm=normalize(mat3(modelMatrix)*objectNormal);\nvWinLocalY=aLocalY;');
   shader.fragmentShader=shader.fragmentShader
    .replace('#include <common>',`#include <common>
     uniform float uNight;
     varying vec3 vWinWorld;
     varying vec3 vWinNorm;
+    varying float vWinLocalY;
     float winHash(vec3 p){return fract(sin(dot(floor(p),vec3(127.1,311.7,74.7)))*43758.5453);}
    `)
    .replace('#include <color_fragment>',`#include <color_fragment>
     // Per-room seed + local room coordinates with view-dependent parallax depth
-    vec3 roomCell = vec3(vWinWorld.x * 0.34, vWinWorld.y * 0.31, vWinWorld.z * 0.34);
+    vec3 roomCell = vec3(vWinWorld.x * 0.34, vWinLocalY * 0.31, vWinWorld.z * 0.34);
     float seed = winHash(roomCell);
-    float isShop = 1.0 - smoothstep(2.6, 3.6, vWinWorld.y);
+    float isShop = 1.0 - smoothstep(2.6, 3.6, vWinLocalY);
     vec3 viewDir = normalize(cameraPosition - vWinWorld);
     vec3 nrm = normalize(vWinNorm);
     if (dot(nrm, viewDir) < 0.0) nrm = -nrm;
@@ -96,35 +97,35 @@ export function addArchitecture(scene,renderer,geo=window.Geo){
     // Parallax offset into room interior
     vec3 roomUV = fract(roomCell) - 0.5;
     float depthShift = clamp(dot(viewDir, vec3(0.0, 1.0, 0.0)), -0.6, 0.6);
-    float roomY = clamp(fract(vWinWorld.y * 0.31) - depthShift * 0.25, 0.0, 1.0);
+    float roomY = clamp(fract(vWinLocalY * 0.31) - depthShift * 0.25, 0.0, 1.0);
     float horiz = fract((vWinWorld.x + vWinWorld.z) * 0.34);
 
     // Venetian blinds / curtains on upper 35% of residential/office windows
     float blindDrop = mix(0.18, 0.58, fract(seed * 9.7)) * (1.0 - isShop * 0.8);
     float isBlind = step(1.0 - blindDrop, roomY);
-    float slat = 0.85 + 0.15 * sin(vWinWorld.y * 55.0);
+    float slat = 0.85 + 0.15 * sin(vWinLocalY * 55.0);
 
-    // Recessed room back wall + ceiling gradient (warm tan/cream interior behind dark glass)
-    vec3 roomWall = mix(vec3(0.14, 0.16, 0.19), vec3(0.30, 0.27, 0.24), smoothstep(0.15, 0.85, roomY));
-    roomWall = mix(roomWall, vec3(0.46, 0.44, 0.40) * slat, isBlind * 0.55);
+    // Recessed room back wall + ceiling gradient (proper linear-space dark glass interior!)
+    vec3 roomWall = mix(vec3(0.018, 0.024, 0.032), vec3(0.068, 0.056, 0.044), smoothstep(0.15, 0.85, roomY));
+    roomWall = mix(roomWall, vec3(0.13, 0.12, 0.10) * slat, isBlind * 0.55);
     // Warm retail depth for ground-floor storefronts
-    vec3 shopInterior = mix(vec3(0.22, 0.19, 0.16), vec3(0.42, 0.35, 0.26), smoothstep(0.1, 0.9, roomY));
+    vec3 shopInterior = mix(vec3(0.035, 0.028, 0.022), vec3(0.11, 0.082, 0.054), smoothstep(0.1, 0.9, roomY));
     vec3 interior = mix(roomWall, shopInterior, isShop);
 
     // Subtle interior furniture/shelf silhouettes
-    float shelf = smoothstep(0.42, 0.48, abs(horiz - 0.5)) * 0.25;
+    float shelf = smoothstep(0.40, 0.48, abs(horiz - 0.5)) * 0.35;
     interior *= (1.0 - shelf);
 
-    // Grazing Fresnel reflection of sky/horizon on exterior glass pane
+    // Grazing Fresnel reflection of sky/horizon on exterior glass pane (linear-space values)
     float fresnel = pow(1.0 - clamp(dot(nrm, viewDir), 0.0, 1.0), 3.0);
-    vec3 skyRefl = mix(vec3(0.42, 0.56, 0.72), vec3(0.10, 0.14, 0.22), uNight);
-    diffuseColor.rgb = mix(interior, skyRefl, clamp(0.18 + fresnel * 0.68, 0.0, 0.86));
+    vec3 skyRefl = mix(vec3(0.11, 0.17, 0.26), vec3(0.016, 0.024, 0.045), uNight);
+    diffuseColor.rgb = mix(interior, skyRefl, clamp(0.14 + fresnel * 0.62, 0.0, 0.80));
    `)
    .replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
-    vec3 eCell = vec3(vWinWorld.x * 0.34, vWinWorld.y * 0.31, vWinWorld.z * 0.34);
+    vec3 eCell = vec3(vWinWorld.x * 0.34, vWinLocalY * 0.31, vWinWorld.z * 0.34);
     float wh = winHash(eCell);
-    float shopFloor = 1.0 - smoothstep(2.6, 3.6, vWinWorld.y);
-    float ry = fract(vWinWorld.y * 0.31);
+    float shopFloor = 1.0 - smoothstep(2.6, 3.6, vWinLocalY);
+    float ry = fract(vWinLocalY * 0.31);
     float blindMask = 1.0 - step(1.0 - mix(0.15, 0.52, fract(wh * 9.7)) * (1.0 - shopFloor * 0.8), ry) * 0.58;
     float litProb = mix(0.58, 0.35, shopFloor);
     float lit = step(litProb, wh) * (uNight * 0.95 + shopFloor * 0.18);
@@ -143,13 +144,13 @@ export function addArchitecture(scene,renderer,geo=window.Geo){
  mat.siding=new T.MeshStandardMaterial({map:siding,vertexColors:true,color:'#ffffff',roughness:.85,side:T.DoubleSide});
  addWallWeathering(mat.siding, 0.18);
 
- const batches=new Map(),wallMeshes=[],special=[];let count=0;
+ const batches=new Map(),wallMeshes=[],special=[];let count=0,curGy=0;
  // Collect rooftop prop transforms for 3 batched InstancedMeshes across the whole city (HVAC, skylights, penthouses)
  const roofHvac=[],roofSkylight=[],roofPenthouse=[];
  let propSeed=9109;const pRnd=()=>{propSeed=(propSeed*1664525+1013904223)>>>0;return propSeed/4294967296};
 
- function b(key,type){let k=key+'|'+type;if(!batches.has(k))batches.set(k,{p:[],uv:[],c:[],type});return batches.get(k)}
- function tri(out,a,b,c,color,uv=[[0,0],[1,0],[0,1]]){out.p.push(...a,...b,...c);for(let i=0;i<3;i++){out.c.push(color.r,color.g,color.b);out.uv.push(...uv[i])}}
+ function b(key,type){let k=key+'|'+type;if(!batches.has(k))batches.set(k,{p:[],uv:[],c:[],ly:[],type});return batches.get(k)}
+ function tri(out,a,b,c,color,uv=[[0,0],[1,0],[0,1]]){out.p.push(...a,...b,...c);out.ly.push(a[1],b[1],c[1]);for(let i=0;i<3;i++){out.c.push(color.r,color.g,color.b);out.uv.push(...uv[i])}}
  function quad(out,a,b,c,d,color,u=1,v=1){tri(out,a,b,c,color,[[0,0],[u,0],[u,v]]);tri(out,a,c,d,color,[[0,0],[u,v],[0,v]])}
  const C=x=>new T.Color(x),stone=C('#d2c7ad'),roofColor=C('#6d7276');
  function edges(p){let area=0;for(let i=0;i<p.length;i++){let a=p[i],e=p[(i+1)%p.length];area+=a[0]*e[1]-e[0]*a[1]}const sign=area>0?1:-1;return p.map((a,i)=>{let e=p[(i+1)%p.length],dx=e[0]-a[0],dz=e[1]-a[1],len=Math.hypot(dx,dz);return{a,e,dx:dx/len,dz:dz/len,nx:dz/len*sign,nz:-dx/len*sign,len}}).filter(e=>e.len>.05)}
@@ -180,10 +181,10 @@ export function addArchitecture(scene,renderer,geo=window.Geo){
   }
  }
 
- function textSign(text,x,y,z,angle,w=7){let ca=document.createElement('canvas');ca.width=1024;ca.height=128;let c=ca.getContext('2d');c.fillStyle='#223931';c.fillRect(0,0,1024,128);c.fillStyle='#e5dfc5';c.font='600 58px Georgia';c.textAlign='center';c.fillText(text,512,83,980);let tex=new T.CanvasTexture(ca);tex.colorSpace=T.SRGBColorSpace;let m=new T.Mesh(new T.PlaneGeometry(w,w/8),new T.MeshStandardMaterial({map:tex,roughness:.7,side:T.DoubleSide}));m.position.set(x,y,z);m.rotation.y=angle;scene.add(m);return m}
- function landmarkBox(w,h,d,color,x,y,z,yaw=0){let m=new T.Mesh(new T.BoxGeometry(w,h,d),new T.MeshStandardMaterial({color,roughness:.72,metalness:color==='#30413f'?.32:0}));m.position.set(x,y,z);m.rotation.y=yaw;m.castShadow=m.receiveShadow=true;scene.add(m);return m}
- function landmarkRoof(r,h,color,x,y,z,yaw=0){let m=new T.Mesh(new T.ConeGeometry(r,h,4),new T.MeshStandardMaterial({color,roughness:.82}));m.position.set(x,y,z);m.rotation.y=yaw+Math.PI/4;m.castShadow=m.receiveShadow=true;scene.add(m);return m}
- function landmarkColumn(radius,height,color,x,y,z){let m=new T.Mesh(new T.CylinderGeometry(radius*.82,radius,height,12),new T.MeshStandardMaterial({color,roughness:.8}));m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;scene.add(m);return m}
+ function textSign(text,x,y,z,angle,w=7){let ca=document.createElement('canvas');ca.width=1024;ca.height=128;let c=ca.getContext('2d');c.fillStyle='#223931';c.fillRect(0,0,1024,128);c.fillStyle='#e5dfc5';c.font='600 58px Georgia';c.textAlign='center';c.fillText(text,512,83,980);let tex=new T.CanvasTexture(ca);tex.colorSpace=T.SRGBColorSpace;let m=new T.Mesh(new T.PlaneGeometry(w,w/8),new T.MeshStandardMaterial({map:tex,roughness:.7,side:T.DoubleSide}));m.position.set(x,y+curGy,z);m.rotation.y=angle;scene.add(m);return m}
+ function landmarkBox(w,h,d,color,x,y,z,yaw=0){let m=new T.Mesh(new T.BoxGeometry(w,h,d),new T.MeshStandardMaterial({color,roughness:.72,metalness:color==='#30413f'?.32:0}));m.position.set(x,y+curGy,z);m.rotation.y=yaw;m.castShadow=m.receiveShadow=true;scene.add(m);return m}
+ function landmarkRoof(r,h,color,x,y,z,yaw=0){let m=new T.Mesh(new T.ConeGeometry(r,h,4),new T.MeshStandardMaterial({color,roughness:.82}));m.position.set(x,y+curGy,z);m.rotation.y=yaw+Math.PI/4;m.castShadow=m.receiveShadow=true;scene.add(m);return m}
+ function landmarkColumn(radius,height,color,x,y,z){let m=new T.Mesh(new T.CylinderGeometry(radius*.82,radius,height,12),new T.MeshStandardMaterial({color,roughness:.8}));m.position.set(x,y+curGy,z);m.castShadow=m.receiveShadow=true;scene.add(m);return m}
  const edgeYaw=e=>Math.atan2(-e.dz,e.dx);
 
  for(let index=0;index<Geo.buildings.length;index++){
@@ -198,17 +199,22 @@ export function addArchitecture(scene,renderer,geo=window.Geo){
   let color=C(borden?'#8c9b65':academy?'#bd8a74':customHouse?'#c9c4b4':mill?'#b8b5a6':isHouse?['#ddd7c3','#b2b9ac','#b5b6bd','#ccc1ab','#a1afa4'][index%5]:['#bbaba1','#c9b6a5','#b7a494','#d0c5af'][index%4]);
   if(src.colour&&CSS.supports('color',src.colour))color=C(src.colour);if(!academy&&!borden&&!hall&&!justice&&!customHouse&&/concrete|stone|plaster/.test(src.material||''))type='stone';
   const outs={wall:b(key,type),trim:b(key,'trim'),glass:b(key,'glass'),roof:b(key,'roof')};
+  let gyMin=Infinity,gyMax=-Infinity;
+  for(const v of p){const gy=Geo.groundY?Geo.groundY(v[0],v[1]):0;if(gy<gyMin)gyMin=gy;if(gy>gyMax)gyMax=gy;}
+  if(!Number.isFinite(gyMin)){gyMin=0;gyMax=0;}
+  const gyB=(gyMin+gyMax)*0.5,skirt=Math.max(2.5,(gyMax-gyMin)+2.5);curGy=gyB;
+  const marks=[outs.wall.p.length,outs.trim.p.length,outs.glass.p.length,outs.roof.p.length];
   const detail=academy||borden||hall||justice||customHouse||mill||(isNewBedford?Math.hypot(center[0]-1450,center[1]-1300)<540:Math.hypot(center[0]-1310,center[1]-2750)<720);
   const facade=detail||(downtown&&area>70&&index%2===0);
 
   if(hall){
    const cx=center[0],cz=center[1],inner=p.map(v=>[cx+(v[0]-cx)*.82,cz+(v[1]-cz)*.82]);
-   for(let e of es){wall(outs.wall,e,4.8,8,C('#c7c4b3'));band(outs.trim,e,7.6,.5,C('#d9d5c1'),.4);wall(outs.glass,e,15.5,21.3,C('#a4b8bb'));band(outs.trim,e,14.8,.8,C('#d5d1bd'),.35);band(outs.trim,e,21.3,.8,C('#d5d1bd'),.35);for(let t=.6;t<e.len;t+=2.8){let a=t-.2,z=t+.2;quad(outs.trim,pt(e,a,15.4,.5),pt(e,z,15.4,.5),pt(e,z,21.5,.5),pt(e,a,21.5,.5),C('#c3c1b3'));quad(outs.trim,pt(e,a,15.4,0),pt(e,a,15.4,.5),pt(e,a,21.5,.5),pt(e,a,21.5,0),C('#aaa99d'))}}
+   for(let e of es){wall(outs.wall,e,-skirt,4.8,C('#8d8b80'));wall(outs.wall,e,4.8,8,C('#c7c4b3'));band(outs.trim,e,7.6,.5,C('#d9d5c1'),.4);wall(outs.glass,e,15.5,21.3,C('#a4b8bb'));band(outs.trim,e,14.8,.8,C('#d5d1bd'),.35);band(outs.trim,e,21.3,.8,C('#d5d1bd'),.35);for(let t=.6;t<e.len;t+=2.8){let a=t-.2,z=t+.2;quad(outs.trim,pt(e,a,15.4,.5),pt(e,z,15.4,.5),pt(e,z,21.5,.5),pt(e,a,21.5,.5),C('#c3c1b3'));quad(outs.trim,pt(e,a,15.4,0),pt(e,a,15.4,.5),pt(e,a,21.5,.5),pt(e,a,21.5,0),C('#aaa99d'))}}
    for(let e of edges(inner)){wall(outs.glass,e,8,14.8,C('#7c9ba5'));for(let t=0;t<e.len;t+=2){quad(outs.trim,pt(e,t,8,.12),pt(e,t+.08,8,.12),pt(e,t+.08,14.8,.12),pt(e,t,14.8,.12),C('#354c52'))}}
    cap(outs.roof,p,22,roofColor);special.push({name:src.name,center,kind:'Brutalist concrete, recessed glass and projecting sun fins'});
   }else{
    for(let e of es){
-    wall(outs.wall,e,0,h,color);band(outs.trim,e,0,.7,isHouse?C('#797d71'):C('#8b8e83'),.06);
+    wall(outs.wall,e,-skirt,h,color);band(outs.trim,e,-skirt,skirt+.7,isHouse?C('#797d71'):C('#8b8e83'),.06);
     if(facade){
      band(outs.trim,e,h-.35,.35,stone,.22);if(!isHouse)band(outs.trim,e,3.6,.22,stone,.14);
      if(academy){band(outs.trim,e,7,.15,stone,.1);band(outs.trim,e,10.5,.15,stone,.1);band(outs.trim,e,14,.15,stone,.1);band(outs.trim,e,h-.7,.18,stone,.3)}
@@ -244,21 +250,22 @@ export function addArchitecture(scene,renderer,geo=window.Geo){
     const mid=pt(longest,longest.len*0.5,h,-inset);
     if(area>360){
      const ph=2.1+pRnd()*1.2;
-     roofPenthouse.push({x:mid[0],y:h+ph*0.5,z:mid[2],w:Math.min(4.8,longest.len*0.22),h:ph,d:3.2,a:ang});
+     roofPenthouse.push({x:mid[0],y:h+gyB+ph*0.5,z:mid[2],w:Math.min(4.8,longest.len*0.22),h:ph,d:3.2,a:ang});
     }
     for(let k=0;k<2;k++){
      const t=(0.24+k*0.52)*longest.len;
      const hp=pt(longest,t,h,-inset);
-     roofHvac.push({x:hp[0],y:h+0.62,z:hp[2],w:1.7+pRnd()*0.9,h:1.15+pRnd()*0.35,d:1.4+pRnd()*0.7,a:ang});
+     roofHvac.push({x:hp[0],y:h+gyB+0.62,z:hp[2],w:1.7+pRnd()*0.9,h:1.15+pRnd()*0.35,d:1.4+pRnd()*0.7,a:ang});
     }
     if(pRnd()<0.65){
      const sp=pt(longest,longest.len*0.36,h,-inset*1.3);
-     roofSkylight.push({x:sp[0],y:h+0.3,z:sp[2],w:2.6+pRnd()*1.4,h:0.48,d:1.8+pRnd()*0.9,a:ang});
+     roofSkylight.push({x:sp[0],y:h+gyB+0.3,z:sp[2],w:2.6+pRnd()*1.4,h:0.48,d:1.8+pRnd()*0.9,a:ang});
     }
    }
    if(academy||borden||justice||mill)special.push({name:src.name,center,kind:borden?'Green clapboard, dark shutters and gabled roof':academy?'Four-story red brick, arched windows and green awnings':justice?'Modern courthouse glazing and stone':'Mill windows and masonry'});
   }
   if(detail){let e=es.reduce((a,z)=>z.len>a.len?z:a,es[0]);if(e&&src.name&&e.len>5){let q=pt(e,e.len/2,borden?2.6:4.1,.28);textSign(src.name.toUpperCase(),...q,Math.atan2(e.nx,e.nz),Math.min(academy?8:10,e.len*(academy?.43:.58)))}}
+  for(const [out,m0] of [[outs.wall,marks[0]],[outs.trim,marks[1]],[outs.glass,marks[2]],[outs.roof,marks[3]]])for(let i=m0+1;i<out.p.length;i+=3)out.p[i]+=gyB;
   count++;
  }
 
@@ -268,6 +275,7 @@ export function addArchitecture(scene,renderer,geo=window.Geo){
   g.setAttribute('position',new T.Float32BufferAttribute(out.p,3));
   g.setAttribute('uv',new T.Float32BufferAttribute(out.uv,2));
   g.setAttribute('color',new T.Float32BufferAttribute(out.c,3));
+  g.setAttribute('aLocalY',new T.Float32BufferAttribute(out.ly,1));
   g.computeVertexNormals();g.computeBoundingSphere();
   let m=new T.Mesh(g,mat[out.type]);
   m.castShadow=['brick','stone','siding','roof'].includes(out.type);

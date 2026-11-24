@@ -508,3 +508,12 @@ body.split-view #extrasHud{display:none!important}
  #rvSplitPanel{width:calc(100vw - 28px)}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+.tiles-box{margin:12px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);text-align:left}
+#rvDock{gap:2px;padding:6px 10px}
+.rv-dock-btn{padding:6px 8px}
+.tiles-box h3{margin:0 0 8px;font-size:10px;letter-spacing:1.4px;color:#7cc8ff;font-weight:700}
+.tiles-row{display:flex;gap:8px;align-items:center}
+.tiles-row input{flex:1;min-width:0;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(8,12,20,0.85);color:#eef4fc;font:12px/1.2 -apple-system,BlinkMacSystemFont,sans-serif}
+.tiles-row button{padding:8px 12px;border-radius:8px;border:1px solid rgba(56,182,255,0.45);background:rgba(26,118,224,0.28);color:#e6f4ff;font:600 11px/1.2 -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;white-space:nowrap}
+.tiles-row button.active{background:#2391ff;border-color:#69c8ff;color:#fff}
+#gmapsTilesStatus{margin:6px 0 0;font-size:11px;color:rgba(218,230,245,0.78)}

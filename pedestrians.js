@@ -130,7 +130,7 @@ export function createPedestrians(scene,Geo,random=Math.random){
    const point=place(person,roadPoint),near=point&&Math.hypot(person.x-player.x,person.y-player.y)<ACTIVE_RADIUS;
    person.c.root.visible=!!near;
    if(!near)continue;
-   person.c.root.position.set(person.x*WORLD_SCALE,.08,person.y*WORLD_SCALE);
+   person.c.root.position.set(person.x*WORLD_SCALE,.08+(Geo.groundY?Geo.groundY(person.x*WORLD_SCALE,person.y*WORLD_SCALE):0),person.y*WORLD_SCALE);
    person.c.root.rotation.y=(person.direction>0?Math.PI/2:-Math.PI/2)-point.angle;
    person.c.update(phase+person.gaitOffset,!pause,false);
   }

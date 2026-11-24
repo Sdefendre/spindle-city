@@ -6,8 +6,9 @@ import {planRoadRoute} from './route-planner.js';
 
 export function initExtras(g){
  const {Geo,scene,sun,T,toast,S,places}=g,$=id=>document.getElementById(id);
- const KEY='spindle-extras-v1:'+g.config.id;let st={cash:0,hour:9.5,jobs:0};
+ const KEY='spindle-extras-v2:'+g.config.id;let st={cash:0,hour:17.25,jobs:0};
  try{Object.assign(st,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch{}
+ const gy=(x,z)=>Geo.groundY?Geo.groundY(x,z):0;
  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch{}};
  const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 
@@ -23,18 +24,19 @@ export function initExtras(g){
  const lamp=new T.SpotLight('#fff1d6',0,70,.55,.6,1.2);lamp.castShadow=false;scene.add(lamp,lamp.target);
  function applySky(){
   const elev=Math.sin((st.hour-6)/12*Math.PI),d=clamp((elev+.1)/.35,0,1),day=d*d*(3-2*d),low=1-clamp(Math.abs(elev)/.4,0,1);
+  const wet=g.wetUniform?g.wetUniform.value:0;
   if(g.nightUniform)g.nightUniform.value=1-day;
-  if(g.lampPoolMat)g.lampPoolMat.opacity=(1-day)*0.82;
+  if(g.lampPoolMat)g.lampPoolMat.opacity=(1-day)*0.82*(1+0.55*wet);
   if(g.lampBulbMat)g.lampBulbMat.emissiveIntensity=0.25+(1-day)*3.2;
-  sun.intensity=base.sun*day;sun.color.copy(base.sunColor).lerp(dusk,low*.7);
-  for(const l of lights)l.o.intensity=l.base*(.16+.84*day);
-  scene.environmentIntensity=base.env*(.1+.9*day);scene.backgroundIntensity=base.bg*(.05+.95*day);
-  if(base.fog)scene.fog.color.copy(base.fog).lerp(nightFog,1-day);
+  sun.intensity=base.sun*day*(1-0.52*wet);sun.color.copy(base.sunColor).lerp(dusk,low*.78);
+  for(const l of lights)l.o.intensity=l.base*(.18+.82*day)*(1-0.18*wet);
+  scene.environmentIntensity=base.env*(.12+.88*day)*(1+1.15*wet);scene.backgroundIntensity=base.bg*(.06+.94*day)*(1-0.30*wet);
+  if(base.fog){scene.fog.color.copy(base.fog).lerp(dusk,low*0.28*day).lerp(nightFog,1-day);if(wet>0.01)scene.fog.color.lerp(new T.Color(day<.2?'#0c1424':'#7e8b96'),wet*0.42);}
   const v=g.vehicle;lamp.intensity=v&&day<.45?900*(1-day):0;
-  if(v&&lamp.intensity){const fx=Math.sin(v.heading),fz=Math.cos(v.heading);lamp.position.set(v.x*S+fx*1.9,.9,v.y*S+fz*1.9);lamp.target.position.set(v.x*S+fx*30,0,v.y*S+fz*30)}
+  if(v&&lamp.intensity){const fx=Math.sin(v.heading),fz=Math.cos(v.heading),gh=gy(v.x*S,v.y*S);lamp.position.set(v.x*S+fx*1.9,.9+gh,v.y*S+fz*1.9);lamp.target.position.set(v.x*S+fx*30,gh,v.y*S+fz*30)}
   const h=Math.floor(st.hour),m=Math.floor((st.hour-h)*60);
   $('time').textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
-  $('clockCity').textContent=g.config.name.toUpperCase()+' · '+(day<.15?'NIGHT':low>.45?(st.hour<12?'SUNRISE':'SUNSET'):'DAYLIGHT');
+  $('clockCity').textContent=g.config.name.toUpperCase()+' · '+(wet>0.35?'RAIN · ':'')+(day<.15?'NIGHT':low>.45?(st.hour<12?'SUNRISE':'GOLDEN HOUR'):'DAYLIGHT');
  }
 
  // ---- GPS: a route line on the road to the current target
@@ -44,7 +46,7 @@ export function initExtras(g){
  function drawRoute(){
   const pts=route?route.points:[],pos=[];
   for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,nx=-dy/len*.7,ny=dx/len*.7;
-   const q=[[a.x+nx,a.y+ny],[a.x-nx,a.y-ny],[b.x+nx,b.y+ny],[b.x-nx,b.y-ny]].map(p=>[p[0]*S,.17,p[1]*S]);
+   const q=[[a.x+nx,a.y+ny],[a.x-nx,a.y-ny],[b.x+nx,b.y+ny],[b.x-nx,b.y-ny]].map(p=>[p[0]*S,.17+gy(p[0]*S,p[1]*S),p[1]*S]);
    pos.push(...q[0],...q[1],...q[2],...q[1],...q[3],...q[2])}
   ribbon.geometry.setAttribute('position',new T.Float32BufferAttribute(pos,3));ribbon.visible=pos.length>0;
  }
@@ -57,7 +59,7 @@ export function initExtras(g){
  // ---- courier jobs: drive into the orange beacon, then to the drop-off
  const beacon=color=>{const m=new T.Mesh(new T.CylinderGeometry(3.2,3.2,34,24,1,true),new T.MeshBasicMaterial({color,transparent:true,opacity:.3,depthWrite:false,side:T.DoubleSide}));m.visible=false;scene.add(m);return m};
  const pickupMesh=beacon('#ff9d3c'),dropMesh=beacon('#c4f678');let offer=null,job=null;
- const place=(mesh,p)=>{mesh.position.set(p.x*S,17,p.y*S);mesh.visible=true};
+ const place=(mesh,p)=>{mesh.position.set(p.x*S,17+gy(p.x*S,p.y*S),p.y*S);mesh.visible=true};
  function roadPoint(from,min,max){
   for(let i=0;i<60;i++){const r=Geo.driving[Math.floor(Math.random()*Geo.driving.length)],p=Geo.routePoint(r,Math.random()*400),d=dist(p,from);
    if(d>min&&d<max&&!Geo.blocked(p.x,p.y))return{x:p.x,y:p.y}}

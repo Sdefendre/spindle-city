@@ -105,8 +105,10 @@ export function addFallRiverLandmarks(scene, Geo) {
     for (let i = 0; i < samples.length; i++) {
       const before = samples[Math.max(0, i - 1)], after = samples[Math.min(samples.length - 1, i + 1)];
       const offset = offsetFor(before, after, clearance * side);
-      lower.push(samples[i].clone().add(offset).setY(deckY));
-      upper.push(samples[i].clone().add(offset).setY(topY));
+      const basePt = samples[i].clone().add(offset);
+      const gy = Geo.groundY ? Geo.groundY(basePt.x, basePt.z) : 0;
+      lower.push(basePt.clone().setY(deckY + gy));
+      upper.push(basePt.clone().setY(topY + gy));
     }
     for (let i = 1; i < lower.length; i++) {
       addBeam(darkBeams, lower[i - 1], lower[i], 0.26);

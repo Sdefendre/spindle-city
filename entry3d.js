@@ -1,7 +1,9 @@
+import {loadTerrain} from './terrain.js';
 const city=window.activeCity;
 async function loadCity(){
  if(!window[city.mapKey])await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=city.mapAsset;script.onload=resolve;script.onerror=()=>reject(new Error('Could not load '+city.name+' map data.'));document.head.append(script)});
  window.CITY_DATA=window[city.mapKey];window.Geo=window.createGeography(window.CITY_DATA);
+ await loadTerrain(window.Geo,city.id);
  document.title=`Tesla City Drive | ${city.name}`;
  document.querySelector('.brand h1').firstChild.nodeValue='TESLA';
  document.querySelector('meta[name="description"]').content=`Walk ${city.name} at street level in 3D. Explore real mapped streets, landmarks and waterfront.`;
