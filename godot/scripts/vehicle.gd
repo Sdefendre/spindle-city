@@ -131,7 +131,8 @@ func _physics_process(delta: float) -> void:
 		elif forward_speed > -9.0:
 			force = throttle * mass * 3.0
 	else:
-		_reverse_hold = 0.0
+		if brake_input <= 0.05:
+			_reverse_hold = 0.0
 		if driver == "":
 			brake_amount = maxf(brake_amount, 0.5)
 	# Ease off the power when the driven wheels are sliding.

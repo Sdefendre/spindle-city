@@ -18,20 +18,24 @@ project, open `godot/project.godot` in the Godot editor.
 
 ## Controls
 
-| Action | Keyboard and mouse | Controller |
-| --- | --- | --- |
-| Move / steer | W A S D or arrows | Left stick |
-| Look | Mouse (click to capture) | Right stick |
-| Run | Shift | L3 |
-| Jump (on foot) / handbrake (driving) | Space | B |
-| Accelerate / brake and reverse | W / S | RT / LT |
-| Enter, exit, interact | E | A |
-| Camera view | V | X |
-| Map | M | Y |
-| Auto drive to GPS pin | F | LB |
-| Horn / headlights / reset car | H / L / R | RB / D-pad up / D-pad down |
-| Hide HUD | C | — |
-| Pause | Esc | Start |
+| Action | Keyboard and mouse | Xbox Wireless / Series | DualSense (PS5) | Touch (iPhone, no pad) |
+| --- | --- | --- | --- | --- |
+| Move / steer | W A S D or arrows | Left stick | Left stick | Left virtual stick |
+| Look | Mouse (click to capture) | Right stick | Right stick | Drag open screen |
+| Run | Shift | L3 | L3 | Push stick fully |
+| Jump (on foot) / handbrake (driving) | Space | B | ○ | Brake button (driving) |
+| Accelerate / brake and reverse | W / S | RT / LT | R2 / L2 | Virtual stick up / down |
+| Enter, exit, interact | E | A | × | Interact button |
+| Camera view | V | X | □ | View button |
+| Map | M | Y or View | △ or Create | Map button |
+| Auto drive to GPS pin | F | LB | L1 | — |
+| Horn / headlights / reset car | H / L / R | RB / D-pad up / D-pad down | R1 / D-pad up / D-pad down | — |
+| Hide HUD | C | R3 | R3 | — |
+| Pause | Esc | Menu | Options | Pause button |
+| Menu navigate / confirm / back | Arrows, Tab / Enter / Esc | D-pad or LS, LB/RB / A / B | D-pad or L-Stick, L1/R1 / × / ○ | Tap |
+| Explorer's map pan / zoom | Drag / Scroll | Right stick / RT & LT | Right stick / R2 & L2 | Drag |
+
+Deadzones: left stick `0.12` (1.45 steering curve), right stick `0.14` (1.5 look curve), analog triggers `0.06`, buttons `0.20`, menu stick navigation `0.50`. Button prompts follow the active input device automatically (Xbox vs DualSense vs keyboard vs touch). The touch overlay hides while a controller is active and returns on touch; disconnecting a controller mid-play stops throttle/steer/auto-drive and pauses the game until you resume.
 
 ## What is in the port
 
@@ -65,6 +69,7 @@ project, open `godot/project.godot` in the Godot editor.
 ```bash
 godot --headless --fixed-fps 60 --path godot -- --selftest
 godot --headless --fixed-fps 60 --path godot -- --selftest --city=new-bedford
+godot --headless --fixed-fps 120 --path godot -s tests/gamepad_test.gd
 godot --headless --fixed-fps 120 --path godot -s tests/vehicle_test.gd -- model_y coupe van
 godot --path godot -- --demo
 ```

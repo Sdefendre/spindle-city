@@ -34,6 +34,9 @@ var auto_drive := false
 var lights_override := -1
 var look_sensitivity := 1.0
 var invert_y := false
+var input_device := "keyboard"   # "keyboard", "gamepad", or "touch"
+var active_joypad := -1
+var active_joypad_name := ""
 var place_markers: Array[Node3D] = []
 var lamp_lights: Array[OmniLight3D] = []
 var demo := false
@@ -47,6 +50,10 @@ var _last_pos := Vector2.ZERO
 var _spawn_dir := Vector2.DOWN
 var _fps_samples: Array[float] = []
 var _auto_stuck := 0.0
+var _touch_handbrake := false
+var _look_touch_idx := -1
+var _prompt_label_text := ""
+var _prompt_touch_text := ""
 
 
 func _ready() -> void:
@@ -104,6 +111,21 @@ func _ready() -> void:
 	ui.shortcut.connect(_shortcut)
 	ui.time_skip.connect(func() -> void: sky.hour = fposmod(sky.hour + 6.0, 24.0))
 	ui.quit_pressed.connect(_quit)
+	ui.touch_controls.interact_pressed.connect(func() -> void:
+		if state == "playing":
+			_interact())
+	ui.touch_controls.map_pressed.connect(func() -> void:
+		if state == "playing":
+			set_state("map"))
+	ui.touch_controls.pause_pressed.connect(func() -> void:
+		if state == "playing":
+			set_state("paused"))
+	ui.touch_controls.view_pressed.connect(func() -> void:
+		if state == "playing":
+			_toggle_view())
+	ui.touch_controls.handbrake_changed.connect(func(pressed: bool) -> void:
+		_touch_handbrake = pressed)
+	_init_input_device()
 	var spawn: Vector2 = data.safe_point(data.config["spawn"])
 	if str(data.config["spawn_place"]) != "":
 		for p in data.places:
@@ -190,7 +212,7 @@ func _notification(what: int) -> void:
 
 # ---------------------------------------------------------------- input
 
-func _act(action: String, keys: Array, buttons: Array = [], axes: Array = [], deadzone := 0.2) -> void:
+func _act(action: String, keys: Array, buttons: Array = [], axes: Array = [], deadzone := GamepadPrompts.DEADZONE_BUTTON) -> void:
 	if InputMap.has_action(action):
 		InputMap.erase_action(action)
 	InputMap.add_action(action, deadzone)
@@ -209,44 +231,229 @@ func _act(action: String, keys: Array, buttons: Array = [], axes: Array = [], de
 		InputMap.action_add_event(action, e)
 
 
+func _ensure_ui_joypad(action: String, buttons: Array, axes: Array = [], deadzone := GamepadPrompts.DEADZONE_UI) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action, deadzone)
+	elif deadzone > 0.0:
+		InputMap.action_set_deadzone(action, deadzone)
+	var existing := InputMap.action_get_events(action)
+	for b: int in buttons:
+		var has_btn := false
+		for ev in existing:
+			if ev is InputEventJoypadButton and (ev as InputEventJoypadButton).button_index == (b as JoyButton):
+				has_btn = true
+				break
+		if not has_btn:
+			var e := InputEventJoypadButton.new()
+			e.button_index = b as JoyButton
+			InputMap.action_add_event(action, e)
+	for a: Array in axes:
+		var axis_id: JoyAxis = a[0] as JoyAxis
+		var axis_val: float = a[1]
+		var has_axis := false
+		for ev in existing:
+			if ev is InputEventJoypadMotion:
+				var jm := ev as InputEventJoypadMotion
+				if jm.axis == axis_id and signf(jm.axis_value) == signf(axis_val):
+					has_axis = true
+					break
+		if not has_axis:
+			var e := InputEventJoypadMotion.new()
+			e.axis = axis_id
+			e.axis_value = axis_val
+			InputMap.action_add_event(action, e)
+
+
 func _setup_input() -> void:
-	_act("move_forward", [KEY_W, KEY_UP], [], [[JOY_AXIS_LEFT_Y, -1.0]], 0.12)
-	_act("move_back", [KEY_S, KEY_DOWN], [], [[JOY_AXIS_LEFT_Y, 1.0]], 0.12)
-	_act("move_left", [KEY_A, KEY_LEFT], [], [[JOY_AXIS_LEFT_X, -1.0]], 0.12)
-	_act("move_right", [KEY_D, KEY_RIGHT], [], [[JOY_AXIS_LEFT_X, 1.0]], 0.12)
-	_act("look_left", [], [], [[JOY_AXIS_RIGHT_X, -1.0]], 0.14)
-	_act("look_right", [], [], [[JOY_AXIS_RIGHT_X, 1.0]], 0.14)
-	_act("look_up", [], [], [[JOY_AXIS_RIGHT_Y, -1.0]], 0.14)
-	_act("look_down", [], [], [[JOY_AXIS_RIGHT_Y, 1.0]], 0.14)
-	_act("gas", [KEY_W, KEY_UP], [], [[JOY_AXIS_TRIGGER_RIGHT, 1.0]], 0.06)
-	_act("reverse", [KEY_S, KEY_DOWN], [], [[JOY_AXIS_TRIGGER_LEFT, 1.0]], 0.06)
+	_act("move_forward", [KEY_W, KEY_UP], [], [[JOY_AXIS_LEFT_Y, -1.0]], GamepadPrompts.DEADZONE_MOVE)
+	_act("move_back", [KEY_S, KEY_DOWN], [], [[JOY_AXIS_LEFT_Y, 1.0]], GamepadPrompts.DEADZONE_MOVE)
+	_act("move_left", [KEY_A, KEY_LEFT], [], [[JOY_AXIS_LEFT_X, -1.0]], GamepadPrompts.DEADZONE_MOVE)
+	_act("move_right", [KEY_D, KEY_RIGHT], [], [[JOY_AXIS_LEFT_X, 1.0]], GamepadPrompts.DEADZONE_MOVE)
+	_act("look_left", [], [], [[JOY_AXIS_RIGHT_X, -1.0]], GamepadPrompts.DEADZONE_LOOK)
+	_act("look_right", [], [], [[JOY_AXIS_RIGHT_X, 1.0]], GamepadPrompts.DEADZONE_LOOK)
+	_act("look_up", [], [], [[JOY_AXIS_RIGHT_Y, -1.0]], GamepadPrompts.DEADZONE_LOOK)
+	_act("look_down", [], [], [[JOY_AXIS_RIGHT_Y, 1.0]], GamepadPrompts.DEADZONE_LOOK)
+	_act("gas", [KEY_W, KEY_UP], [], [[JOY_AXIS_TRIGGER_RIGHT, 1.0]], GamepadPrompts.DEADZONE_TRIGGER)
+	_act("reverse", [KEY_S, KEY_DOWN], [], [[JOY_AXIS_TRIGGER_LEFT, 1.0]], GamepadPrompts.DEADZONE_TRIGGER)
 	_act("sprint", [KEY_SHIFT], [JOY_BUTTON_LEFT_STICK])
 	_act("handbrake", [KEY_SPACE], [JOY_BUTTON_B])
 	_act("interact", [KEY_E], [JOY_BUTTON_A])
 	_act("view", [KEY_V], [JOY_BUTTON_X])
-	_act("map", [KEY_M], [JOY_BUTTON_Y])
+	_act("map", [KEY_M], [JOY_BUTTON_Y, JOY_BUTTON_BACK])
 	_act("pause", [KEY_ESCAPE], [JOY_BUTTON_START])
 	_act("horn", [KEY_H], [JOY_BUTTON_RIGHT_SHOULDER])
 	_act("lights", [KEY_L], [JOY_BUTTON_DPAD_UP])
 	_act("reset_car", [KEY_R], [JOY_BUTTON_DPAD_DOWN])
 	_act("auto_drive", [KEY_F], [JOY_BUTTON_LEFT_SHOULDER])
-	_act("cinematic", [KEY_C])
+	_act("cinematic", [KEY_C], [JOY_BUTTON_RIGHT_STICK])
+	# Menu navigation and confirm/back bindings for Xbox and DualSense pads.
+	_ensure_ui_joypad("ui_accept", [JOY_BUTTON_A], [], GamepadPrompts.DEADZONE_BUTTON)
+	_ensure_ui_joypad("ui_cancel", [JOY_BUTTON_B], [], GamepadPrompts.DEADZONE_BUTTON)
+	_ensure_ui_joypad("ui_up", [JOY_BUTTON_DPAD_UP], [[JOY_AXIS_LEFT_Y, -1.0]], GamepadPrompts.DEADZONE_UI)
+	_ensure_ui_joypad("ui_down", [JOY_BUTTON_DPAD_DOWN], [[JOY_AXIS_LEFT_Y, 1.0]], GamepadPrompts.DEADZONE_UI)
+	_ensure_ui_joypad("ui_left", [JOY_BUTTON_DPAD_LEFT], [[JOY_AXIS_LEFT_X, -1.0]], GamepadPrompts.DEADZONE_UI)
+	_ensure_ui_joypad("ui_right", [JOY_BUTTON_DPAD_RIGHT], [[JOY_AXIS_LEFT_X, 1.0]], GamepadPrompts.DEADZONE_UI)
+	_ensure_ui_joypad("ui_focus_next", [JOY_BUTTON_RIGHT_SHOULDER], [], GamepadPrompts.DEADZONE_BUTTON)
+	_ensure_ui_joypad("ui_focus_prev", [JOY_BUTTON_LEFT_SHOULDER], [], GamepadPrompts.DEADZONE_BUTTON)
+
+
+func _prefer_touch() -> bool:
+	return OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
+
+
+func prompt_mode() -> String:
+	return GamepadPrompts.mode_for_device(input_device, active_joypad_name)
+
+
+func _init_input_device() -> void:
+	if not Input.joy_connection_changed.is_connected(_on_joy_connection_changed):
+		Input.joy_connection_changed.connect(_on_joy_connection_changed)
+	var debug_pad := ""
+	var debug_touch := false
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--pad-name="):
+			debug_pad = arg.substr(11)
+		elif arg == "--touch-overlay":
+			debug_touch = true
+	if debug_pad != "":
+		set_input_device("gamepad", 0, debug_pad)
+		return
+	if debug_touch:
+		set_input_device("touch")
+		return
+	var pads := Input.get_connected_joypads()
+	if pads.size() > 0:
+		set_input_device("gamepad", pads[0], Input.get_joy_name(pads[0]))
+	elif _prefer_touch():
+		set_input_device("touch")
+	else:
+		set_input_device("keyboard")
+
+
+func set_input_device(device_kind: String, joy_id := -1, joy_name_override := "") -> void:
+	var next_joy_id := active_joypad
+	var next_joy_name := active_joypad_name
+	if device_kind == "gamepad":
+		if joy_id >= 0:
+			next_joy_id = joy_id
+		if joy_name_override != "":
+			next_joy_name = joy_name_override
+		elif next_joy_id >= 0:
+			var detected := Input.get_joy_name(next_joy_id)
+			if detected != "":
+				next_joy_name = detected
+	var changed := input_device != device_kind or active_joypad != next_joy_id or active_joypad_name != next_joy_name
+	input_device = device_kind
+	active_joypad = next_joy_id
+	active_joypad_name = next_joy_name
+	if changed:
+		_refresh_input_mode()
+
+
+func _refresh_input_mode() -> void:
+	if ui == null:
+		return
+	var mode := prompt_mode()
+	ui.set_prompt_mode(mode)
+	if ui.touch_controls != null:
+		ui.touch_controls.set_active_visible(input_device == "touch")
+	_apply_prompt_ui()
+
+
+func _on_joy_connection_changed(device: int, connected: bool) -> void:
+	if connected:
+		var pad_name := Input.get_joy_name(device)
+		set_input_device("gamepad", device, pad_name)
+		var title := GamepadPrompts.pad_title(prompt_mode(), active_joypad_name)
+		if state == "paused":
+			toast("%s connected · press %s to resume" % [title, GamepadPrompts.glyph("pause", prompt_mode())])
+		elif state == "playing" or state == "map":
+			toast("%s connected" % title)
+		return
+	# Controller disconnected: stop live driving/walking inputs and pause if playing.
+	var was_active := device == active_joypad or input_device == "gamepad"
+	var remaining := Input.get_connected_joypads()
+	if remaining.size() > 0:
+		active_joypad = remaining[0]
+		active_joypad_name = Input.get_joy_name(remaining[0])
+	else:
+		active_joypad = -1
+		active_joypad_name = ""
+		if input_device == "gamepad":
+			input_device = "touch" if _prefer_touch() else "keyboard"
+	if was_active:
+		auto_drive = false
+		_touch_handbrake = false
+		if vehicle != null:
+			vehicle.throttle = 0.0
+			vehicle.steer_input = 0.0
+			vehicle.brake_input = 1.0
+			vehicle.handbrake = false
+		if player != null:
+			player.input_dir = Vector3.ZERO
+			player.want_run = false
+		if sound != null:
+			sound.set_horn(false)
+		if state == "playing":
+			set_state("paused")
+		_refresh_input_mode()
+		toast("Controller disconnected · game paused")
+	else:
+		_refresh_input_mode()
+
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventJoypadButton:
+		var jb := event as InputEventJoypadButton
+		if jb.pressed:
+			set_input_device("gamepad", jb.device)
+	elif event is InputEventJoypadMotion:
+		var jm := event as InputEventJoypadMotion
+		if absf(jm.axis_value) > 0.25:
+			set_input_device("gamepad", jm.device)
+	elif event is InputEventScreenTouch or event is InputEventScreenDrag:
+		set_input_device("touch")
+	elif event is InputEventKey:
+		var ke := event as InputEventKey
+		if ke.pressed and not ke.echo:
+			set_input_device("keyboard")
+	elif event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.pressed and mb.device != InputEvent.DEVICE_ID_EMULATION:
+			set_input_device("keyboard")
+	elif event is InputEventMouseMotion:
+		var mm := event as InputEventMouseMotion
+		if mm.device != InputEvent.DEVICE_ID_EMULATION and mm.relative.length() > 3.0:
+			set_input_device("keyboard")
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if state != "playing":
 		return
-	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+	if event is InputEventScreenTouch:
+		var st := event as InputEventScreenTouch
+		if ui != null and ui.touch_controls != null and st.index == ui.touch_controls.stick_touch_index():
+			return
+		if st.pressed and _look_touch_idx == -1:
+			_look_touch_idx = st.index
+		elif not st.pressed and st.index == _look_touch_idx:
+			_look_touch_idx = -1
+	elif event is InputEventScreenDrag:
+		var sd := event as InputEventScreenDrag
+		if sd.index == _look_touch_idx:
+			var y_sign := -1.0 if invert_y else 1.0
+			rig.look(sd.relative.x * 0.0045 * look_sensitivity, sd.relative.y * 0.0036 * look_sensitivity * y_sign)
+	elif event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and event.device != InputEvent.DEVICE_ID_EMULATION:
 		var mm := event as InputEventMouseMotion
 		var y_sign := -1.0 if invert_y else 1.0
 		rig.look(mm.relative.x * 0.003 * look_sensitivity, mm.relative.y * 0.0024 * look_sensitivity * y_sign)
-	elif event is InputEventMouseButton:
+	elif event is InputEventMouseButton and event.device != InputEvent.DEVICE_ID_EMULATION:
 		var mb := event as InputEventMouseButton
 		if mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
 			rig.distance = maxf(2.6, rig.distance - 0.5)
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			rig.distance = minf(13.0, rig.distance + 0.5)
-		elif mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and not demo:
+		elif mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and not demo and input_device == "keyboard" and not OS.has_feature("mobile"):
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -254,10 +461,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func set_state(next: String) -> void:
 	state = next
+	_touch_handbrake = false
+	_look_touch_idx = -1
 	get_tree().paused = next != "playing"
 	ui.show_state(next)
 	if next == "playing":
-		if not demo:
+		if not demo and input_device == "keyboard" and not OS.has_feature("mobile"):
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	else:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -505,7 +714,7 @@ func _enter(v: Vehicle) -> void:
 	player.set_active(false)
 	rig.face(v.heading_dir())
 	sound.play("door_open")
-	toast("%s · W/S drive · A/D steer · Space handbrake · E exit" % v.spec["name"])
+	toast(GamepadPrompts.drive_toast(str(v.spec["name"]), prompt_mode()))
 
 
 func _exit_vehicle() -> void:
@@ -580,7 +789,7 @@ func _interact() -> void:
 		if (p["pos"] as Vector2).distance_to(pos) < 22.0:
 			toast("%s — %s" % [p["name"], p["desc"]])
 			return
-	toast("Follow a beacon or open the map (M) to choose a destination.")
+	toast("Follow a beacon or open the map (%s) to choose a destination." % GamepadPrompts.glyph("map", prompt_mode()))
 
 
 func _on_crash(speed: float, v: Vehicle) -> void:
@@ -702,6 +911,12 @@ func _process(delta: float) -> void:
 		ui.bigmap.queue_redraw()
 
 
+func _toggle_view() -> void:
+	rig.first_person = not rig.first_person
+	rig.snap()
+	toast("First-person view" if rig.first_person else "Third-person view")
+
+
 func _play(delta: float) -> void:
 	if Input.is_action_just_pressed("pause"):
 		set_state("paused")
@@ -710,9 +925,7 @@ func _play(delta: float) -> void:
 		set_state("map")
 		return
 	if Input.is_action_just_pressed("view"):
-		rig.first_person = not rig.first_person
-		rig.snap()
-		toast("First-person view" if rig.first_person else "Third-person view")
+		_toggle_view()
 	if Input.is_action_just_pressed("cinematic"):
 		ui.hud.visible = not ui.hud.visible
 	if Input.is_action_just_pressed("interact"):
@@ -723,18 +936,19 @@ func _play(delta: float) -> void:
 		var y_sign := -1.0 if invert_y else 1.0
 		rig.look(curved.x * 2.8 * look_sensitivity * delta, curved.y * 1.8 * look_sensitivity * y_sign * delta)
 	_crash_cooldown = maxf(0.0, _crash_cooldown - delta)
+	var touch_stick := ui.touch_controls.stick_vec() if ui != null and ui.touch_controls != null else Vector2.ZERO
 	if vehicle != null:
-		var gas := Input.get_action_strength("gas")
-		var rev := Input.get_action_strength("reverse")
-		var raw_steer := Input.get_action_strength("move_left") - Input.get_action_strength("move_right")
+		var gas := maxf(Input.get_action_strength("gas"), maxf(0.0, -touch_stick.y))
+		var rev := maxf(Input.get_action_strength("reverse"), maxf(0.0, touch_stick.y))
+		var raw_steer := clampf(Input.get_action_strength("move_left") - Input.get_action_strength("move_right") - touch_stick.x, -1.0, 1.0)
 		var steer := signf(raw_steer) * pow(absf(raw_steer), 1.45)
-		var hand := Input.is_action_pressed("handbrake")
+		var hand := Input.is_action_pressed("handbrake") or _touch_handbrake
 		if Input.is_action_just_pressed("auto_drive"):
 			if auto_drive:
 				auto_drive = false
 				toast("Auto drive cancelled")
 			elif waypoint == Vector2.INF:
-				toast("Set a GPS destination on the map (M) first.")
+				toast("Set a GPS destination on the map (%s) first." % GamepadPrompts.glyph("map", prompt_mode()))
 			else:
 				auto_drive = true
 				toast("Auto drive to %s · steer or brake to take over" % waypoint_label)
@@ -765,8 +979,10 @@ func _play(delta: float) -> void:
 			_reset_vehicle()
 	else:
 		var v := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+		if touch_stick.length() > 0.01:
+			v = (v + touch_stick).limit_length(1.0)
 		player.input_dir = rig.forward_dir() * -v.y + rig.right_dir() * v.x
-		player.want_run = Input.is_action_pressed("sprint")
+		player.want_run = Input.is_action_pressed("sprint") or touch_stick.length() > 0.88
 		if Input.is_action_just_pressed("handbrake"):
 			player.want_jump = true
 		player.model.visible = not rig.first_person
@@ -842,28 +1058,47 @@ func _slow_update(pos: Vector2) -> void:
 				add_money(PLACE_REWARD * 4, "Every landmark discovered")
 			else:
 				add_money(PLACE_REWARD, "%s discovered · %d / %d" % [p["name"], found.size(), data.places.size()])
-	var prompt := ""
+	_prompt_label_text = ""
+	_prompt_touch_text = ""
 	if vehicle != null:
-		prompt = "E · Step out" if absf(vehicle.forward_speed) < 4.0 else ""
+		if absf(vehicle.forward_speed) < 4.0:
+			_prompt_label_text = "Step out"
+			_prompt_touch_text = "Step out"
 	else:
 		for v in vehicles:
 			if v.map_pos().distance_to(pos) < 4.4:
-				prompt = "E · Drive the %s" % v.spec["name"]
-		if prompt == "" and not traffic.nearest(pos, 4.6, 2.5).is_empty():
-			prompt = "E · Take this car"
+				_prompt_label_text = "Drive the %s" % v.spec["name"]
+				_prompt_touch_text = "Drive"
+		if _prompt_label_text == "" and not traffic.nearest(pos, 4.6, 2.5).is_empty():
+			_prompt_label_text = "Take this car"
+			_prompt_touch_text = "Take car"
 		var offer := missions.offer_at(pos)
-		if prompt == "" and not offer.is_empty():
-			prompt = "E · Start %s" % Missions.KINDS[offer["kind"]]["title"].to_lower()
-		if prompt == "":
+		if _prompt_label_text == "" and not offer.is_empty():
+			_prompt_label_text = "Start %s" % Missions.KINDS[offer["kind"]]["title"].to_lower()
+			_prompt_touch_text = "Start job"
+		if _prompt_label_text == "":
 			for p in data.places:
 				if (p["pos"] as Vector2).distance_to(pos) < 22.0:
-					prompt = "E · " + str(p["name"])
-	ui.set_prompt(prompt)
+					_prompt_label_text = str(p["name"])
+					_prompt_touch_text = "Inspect"
+	_apply_prompt_ui()
 	_refresh_markers()
 	var cars: Array = []
 	for c in traffic.cars:
 		cars.append(c["pos"])
 	ui.minimap.cars = cars
+
+
+func _apply_prompt_ui() -> void:
+	if ui == null:
+		return
+	var mode := prompt_mode()
+	if _prompt_label_text == "":
+		ui.set_prompt("")
+	else:
+		ui.set_prompt(GamepadPrompts.prompt("interact", _prompt_label_text, mode))
+	if ui.touch_controls != null:
+		ui.touch_controls.set_interact_hint(_prompt_touch_text, _prompt_label_text != "")
 
 
 func _update_hud(_delta: float, pos: Vector2, speed: float) -> void:
@@ -872,6 +1107,8 @@ func _update_hud(_delta: float, pos: Vector2, speed: float) -> void:
 	ui.minimap.route = route
 	ui.minimap.span = 260.0 + clampf(speed * 6.0, 0.0, 260.0)
 	ui.minimap.queue_redraw()
+	if ui.touch_controls != null:
+		ui.touch_controls.set_driving(vehicle != null)
 	if vehicle != null:
 		ui.speed_label.text = str(int(round(speed * 2.237)))
 		ui.unit_label.text = "MPH · AUTO" if auto_drive else "MPH"
@@ -1099,6 +1336,36 @@ func _run_selftest() -> void:
 	await _wait(0.3)
 	set_state("playing")
 	_check("map and pause round trip", state == "playing" and not get_tree().paused)
+	# Verify gamepad input map, glyphs, touch overlay toggle, and disconnect safety.
+	var required_joy := ["move_forward", "move_back", "move_left", "move_right", "look_left", "look_right", "look_up", "look_down", "gas", "reverse", "sprint", "handbrake", "interact", "view", "map", "pause", "horn", "lights", "reset_car", "auto_drive", "cinematic", "ui_accept", "ui_cancel", "ui_up", "ui_down", "ui_left", "ui_right", "ui_focus_next", "ui_focus_prev"]
+	var missing_joy: Array[String] = []
+	for act_name: String in required_joy:
+		var has_pad := false
+		if InputMap.has_action(act_name):
+			for ev in InputMap.action_get_events(act_name):
+				if ev is InputEventJoypadButton or ev is InputEventJoypadMotion:
+					has_pad = true
+					break
+		if not has_pad:
+			missing_joy.append(act_name)
+	_check("gamepad input map coverage", missing_joy.is_empty(), ", ".join(missing_joy))
+	set_input_device("touch")
+	var touch_shown := ui.touch_controls.visible
+	set_input_device("gamepad", 0, "DualSense Wireless Controller")
+	var ps_ok := prompt_mode() == "playstation" and not ui.touch_controls.visible and GamepadPrompts.glyph("interact", prompt_mode()) == "×"
+	set_input_device("gamepad", 0, "Xbox Wireless Controller")
+	var xbox_ok := prompt_mode() == "xbox" and GamepadPrompts.glyph("interact", prompt_mode()) == "A"
+	_check("gamepad glyphs and touch overlay toggle", touch_shown and ps_ok and xbox_ok)
+	auto_drive = true
+	if vehicle != null:
+		vehicle.throttle = 0.8
+		vehicle.steer_input = 0.5
+	_on_joy_connection_changed(0, false)
+	var disc_ok := state == "paused" and not auto_drive and (vehicle == null or (vehicle.throttle == 0.0 and vehicle.steer_input == 0.0))
+	_on_joy_connection_changed(0, true)
+	var reconn_stays_paused := state == "paused"
+	set_state("playing")
+	_check("controller disconnect pauses and reconnect stays paused", disc_ok and reconn_stays_paused)
 	await _wait(0.5)
 	print("SELFTEST %s (%d failed)" % ["OK" if _fails == 0 else "FAILED", _fails])
 	get_tree().quit(1 if _fails > 0 else 0)
