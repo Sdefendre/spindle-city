@@ -25,6 +25,11 @@ static var _cache := {}
 static var _model_y: PackedScene
 
 
+static func clear_cache() -> void:
+	_cache.clear()
+	_model_y = null
+
+
 static func _mat(key: String, color: Color, rough: float, metal := 0.0, emit := Color.BLACK, energy := 0.0) -> StandardMaterial3D:
 	if _cache.has(key):
 		return _cache[key]
@@ -146,8 +151,11 @@ static func build(type: String, color: Color) -> Dictionary:
 		var chrome := _mat("y_chrome", Color(0.82, 0.84, 0.86), 0.14, 1.0)
 		var dark_chrome := _mat("y_chrome_dark", Color(0.2, 0.21, 0.22), 0.25, 0.9)
 		var lens := _mat("y_lens", Color(0.75, 0.78, 0.8), 0.08, 0.5)
+		var cabin := _mat("y_interior", Color(0.25, 0.26, 0.29), 0.62, 0.08)
+		var trim_dark := _mat("y_trim", Color(0.14, 0.15, 0.17), 0.6, 0.08)
 		var swaps := {"body": pearl, "glass_body": tinted, "chrome": chrome, "chrome_dark": dark_chrome, "alum": chrome,
-			"metal": dark_chrome, "chrome_rear_lights": brake, "chrome_rear_2": lens, "glass_lights": lens, "glass_front_lights": head}
+			"metal": dark_chrome, "interior": cabin, "black": trim_dark, "black2": trim_dark,
+			"chrome_rear_lights": brake, "chrome_rear_2": lens, "glass_lights": lens, "glass_front_lights": head}
 		for node in glb.find_children("*", "MeshInstance3D", true, false):
 			var mi := node as MeshInstance3D
 			for i in mi.mesh.get_surface_count():

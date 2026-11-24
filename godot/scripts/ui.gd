@@ -7,6 +7,8 @@ signal play_pressed
 signal resume_pressed
 signal quality_changed(quality: String)
 signal volume_changed(value: float)
+signal sensitivity_changed(value: float)
+signal invert_y_changed(inverted: bool)
 signal city_chosen(city_id: String)
 signal car_requested(car_type: String)
 signal waypoint_set(pos: Vector2, label: String)
@@ -136,17 +138,45 @@ class BigMap:
 				pts.append(to_screen(q))
 			draw_polyline(pts, LIME, 4.0)
 		var font := get_theme_default_font()
+		var placed: Array[Rect2] = []
 		for m: Dictionary in markers:
 			var q := to_screen(m["pos"])
-			draw_circle(q, 7.0, Color(0, 0, 0, 0.5))
+			draw_circle(q, 7.0, Color(0, 0, 0, 0.55))
 			draw_circle(q, 5.5, m["color"])
+			placed.append(Rect2(q.x - 8, q.y - 8, 16, 16))
+		for m: Dictionary in markers:
+			var q := to_screen(m["pos"])
 			if m.has("label"):
-				draw_string_outline(font, q + Vector2(10, 5), m["label"], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 4, Color(0, 0, 0, 0.8))
-				draw_string(font, q + Vector2(10, 5), m["label"], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, CREAM)
+				var text: String = str(m["label"])
+				var sz := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14)
+				var pos := q + Vector2(10, 5)
+				var candidates := [Vector2(10, 5), Vector2(-sz.x - 10, 5), Vector2(10, -13), Vector2(10, 21), Vector2(-sz.x - 10, -13), Vector2(-sz.x - 10, 21)]
+				for off: Vector2 in candidates:
+					var cand := q + off
+					var rect := Rect2(cand.x - 2, cand.y - 13, sz.x + 6, 17)
+					var hit := false
+					for prev in placed:
+						if prev.intersects(rect):
+							hit = true
+							break
+					if not hit:
+						pos = cand
+						break
+				placed.append(Rect2(pos.x - 2, pos.y - 13, sz.x + 6, 17))
+				draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 4, Color(0, 0, 0, 0.85))
+				draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, CREAM)
 		var c := to_screen(player)
 		var fwd := heading.normalized()
 		var side := Vector2(-fwd.y, fwd.x)
 		draw_colored_polygon(PackedVector2Array([c + fwd * 12.0, c - fwd * 8.0 + side * 8.0, c - fwd * 8.0 - side * 8.0]), Color.WHITE)
+
+	func pan_by(delta_screen: Vector2) -> void:
+		pan += delta_screen / (_base_scale() * zoom)
+		queue_redraw()
+
+	func zoom_by(factor: float) -> void:
+		zoom = clampf(zoom * factor, 1.0, 12.0)
+		queue_redraw()
 
 	func _gui_input(event: InputEvent) -> void:
 		if event is InputEventMouseButton:
@@ -252,10 +282,14 @@ var load_label: Label
 var play_button: Button
 var quality_button: Button
 var volume_slider: HSlider
+var sensitivity_slider: HSlider
+var invert_button: Button
+var travel_button: Button
 var gps_label: Label
 var stats_label: Label
 var _toast_time := 0.0
 var _quality := "high"
+var _invert_y := false
 var _selected_place := -1
 var places: Array = []
 var found := {}
@@ -272,14 +306,19 @@ static func _box(color: Color, radius := 8, border := Color.TRANSPARENT) -> Styl
 	return sb
 
 
-func _label(text: String, size: int, color := CREAM, bold := false) -> Label:
+func _label(text: String, size: int, color := CREAM, bold := false, hud_shadow := false) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
 	if bold:
 		l.add_theme_constant_override("outline_size", 2)
-		l.add_theme_color_override("font_outline_color", color)
+		l.add_theme_color_override("font_outline_color", Color(0.03, 0.06, 0.05, 0.85) if hud_shadow else color)
+	if hud_shadow:
+		l.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.04, 0.88))
+		l.add_theme_constant_override("shadow_offset_x", 1)
+		l.add_theme_constant_override("shadow_offset_y", 2)
+		l.add_theme_constant_override("shadow_outline_size", 4)
 	return l
 
 
@@ -348,9 +387,9 @@ func _build_hud() -> void:
 	top.add_theme_constant_override("separation", 0)
 	top.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_row.add_child(top)
-	brand_label = _label(str(data.config["brand"]), 15, LIME, true)
-	street_label = _label("", 30, CREAM, true)
-	city_label = _label(str(data.config["name"]).to_upper() + ", MASSACHUSETTS", 12, MUTED)
+	brand_label = _label(str(data.config["brand"]), 15, LIME, true, true)
+	street_label = _label("", 30, CREAM, true, true)
+	city_label = _label(str(data.config["name"]).to_upper() + ", MASSACHUSETTS", 12, CREAM.lerp(MUTED, 0.45), false, true)
 	top.add_child(brand_label)
 	top.add_child(street_label)
 	top.add_child(city_label)
@@ -381,7 +420,7 @@ func _build_hud() -> void:
 	job_box.add_child(job_clock)
 	job_panel.visible = false
 	right.add_child(job_panel)
-	gps_label = _label("", 14, GOLD)
+	gps_label = _label("", 14, GOLD, false, true)
 	gps_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	right.add_child(gps_label)
 
@@ -393,7 +432,7 @@ func _build_hud() -> void:
 	minimap.custom_minimum_size = Vector2(250, 200)
 	minimap.clip_contents = true
 	map_box.add_child(minimap)
-	mode_label = _label("ON FOOT", 12, LIME, true)
+	mode_label = _label("ON FOOT", 12, LIME, true, true)
 	map_box.add_child(mode_label)
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -405,13 +444,13 @@ func _build_hud() -> void:
 	gauge.alignment = BoxContainer.ALIGNMENT_END
 	gauge.custom_minimum_size = Vector2(240, 0)
 	bottom_row.add_child(gauge)
-	unit_label = _label("EXPLORING", 12, LIME, true)
+	unit_label = _label("EXPLORING", 12, LIME, true, true)
 	unit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	speed_label = _label("", 54, CREAM, true)
+	speed_label = _label("", 54, CREAM, true, true)
 	speed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	clock_label = _label("09:30", 26, CREAM)
+	clock_label = _label("09:30", 26, CREAM, false, true)
 	clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	weather_label = _label("CLEAR", 12, MUTED)
+	weather_label = _label("CLEAR", 12, CREAM.lerp(MUTED, 0.35), false, true)
 	weather_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	gauge.add_child(unit_label)
 	gauge.add_child(speed_label)
@@ -513,6 +552,20 @@ func _build_pause() -> void:
 	volume_slider.custom_minimum_size = Vector2(0, 24)
 	volume_slider.value_changed.connect(func(v: float) -> void: volume_changed.emit(v))
 	box.add_child(volume_slider)
+	box.add_child(_label("Look sensitivity", 13, MUTED))
+	sensitivity_slider = HSlider.new()
+	sensitivity_slider.min_value = 0.4
+	sensitivity_slider.max_value = 2.0
+	sensitivity_slider.step = 0.05
+	sensitivity_slider.value = 1.0
+	sensitivity_slider.custom_minimum_size = Vector2(0, 24)
+	sensitivity_slider.value_changed.connect(func(v: float) -> void: sensitivity_changed.emit(v))
+	box.add_child(sensitivity_slider)
+	invert_button = _button("Invert look Y: Off")
+	invert_button.pressed.connect(func() -> void:
+		set_invert_y(not _invert_y)
+		invert_y_changed.emit(_invert_y))
+	box.add_child(invert_button)
 	var skip := _button("Skip ahead six hours")
 	skip.pressed.connect(func() -> void: time_skip.emit())
 	box.add_child(skip)
@@ -576,12 +629,13 @@ func _build_map() -> void:
 	place_box = VBoxContainer.new()
 	place_box.add_theme_constant_override("separation", 6)
 	box.add_child(place_box)
-	var travel := _button("Fast travel to selected place")
-	travel.name = "Travel"
-	travel.pressed.connect(func() -> void:
+	travel_button = _button("Fast travel (discover first)")
+	travel_button.name = "Travel"
+	travel_button.disabled = true
+	travel_button.pressed.connect(func() -> void:
 		if _selected_place >= 0 and found.has(places[_selected_place]["name"]):
 			fast_travel.emit(places[_selected_place]["pos"], places[_selected_place]["name"]))
-	box.add_child(travel)
+	box.add_child(travel_button)
 	var highway := _button("Jump to %s" % data.config["highway_label"])
 	highway.pressed.connect(func() -> void: shortcut.emit("highway"))
 	box.add_child(highway)
@@ -611,9 +665,24 @@ func set_places(list: Array, found_set: Dictionary) -> void:
 		b.tooltip_text = p["desc"]
 		b.pressed.connect(func() -> void:
 			_selected_place = i
+			_update_travel_button()
 			waypoint_set.emit(p["pos"], p["name"]))
 		place_box.add_child(b)
 	progress_label.text = "%d / %d places" % [found.size(), places.size()]
+	_update_travel_button()
+
+
+func _update_travel_button() -> void:
+	if travel_button == null:
+		return
+	var can_travel := _selected_place >= 0 and _selected_place < places.size() and found.has(places[_selected_place]["name"])
+	travel_button.disabled = not can_travel
+	if can_travel:
+		travel_button.text = "Fast travel · " + str(places[_selected_place]["name"])
+	elif _selected_place >= 0 and _selected_place < places.size():
+		travel_button.text = "Discover %s to fast travel" % places[_selected_place]["name"]
+	else:
+		travel_button.text = "Fast travel (discover first)"
 
 
 static func _commas(n: int) -> String:
@@ -643,11 +712,18 @@ func set_quality(q: String) -> void:
 	quality_button.text = "Graphics: " + ("High" if q == "high" else "Balanced")
 
 
+func set_invert_y(inverted: bool) -> void:
+	_invert_y = inverted
+	if invert_button != null:
+		invert_button.text = "Invert look Y: " + ("On" if inverted else "Off")
+
+
 func show_state(state: String) -> void:
 	start_panel.visible = state == "menu" or state == "loading"
 	pause_panel.visible = state == "paused"
 	map_panel.visible = state == "map"
 	hud.visible = state == "playing"
+	toast_label.visible = state == "playing" and _toast_time > 0.0
 	if state == "paused":
 		(pause_panel.find_child("Resume", true, false) as Button).grab_focus()
 	elif state == "map":

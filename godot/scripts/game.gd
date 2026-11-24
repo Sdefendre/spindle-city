@@ -32,6 +32,8 @@ var route := PackedVector2Array()
 var route_mesh: MeshInstance3D
 var auto_drive := false
 var lights_override := -1
+var look_sensitivity := 1.0
+var invert_y := false
 var place_markers: Array[Node3D] = []
 var lamp_lights: Array[OmniLight3D] = []
 var demo := false
@@ -75,6 +77,10 @@ func _ready() -> void:
 	ui.set_quality(sky.quality)
 	ui.volume_slider.set_value_no_signal(float(save.get_value("settings", "volume", 0.8)))
 	sound.set_volume(ui.volume_slider.value)
+	look_sensitivity = float(save.get_value("settings", "sensitivity", 1.0))
+	invert_y = bool(save.get_value("settings", "invert_y", false))
+	ui.sensitivity_slider.set_value_no_signal(look_sensitivity)
+	ui.set_invert_y(invert_y)
 	_apply_quality(sky.quality)
 	ui.play_pressed.connect(_on_play)
 	ui.resume_pressed.connect(func() -> void: set_state("playing"))
@@ -82,6 +88,12 @@ func _ready() -> void:
 	ui.volume_changed.connect(func(v: float) -> void:
 		sound.set_volume(v)
 		save.set_value("settings", "volume", v))
+	ui.sensitivity_changed.connect(func(v: float) -> void:
+		look_sensitivity = v
+		save.set_value("settings", "sensitivity", v))
+	ui.invert_y_changed.connect(func(inv: bool) -> void:
+		invert_y = inv
+		save.set_value("settings", "invert_y", inv))
 	ui.city_chosen.connect(_switch_city)
 	ui.car_requested.connect(_on_car_requested)
 	ui.waypoint_set.connect(func(pos: Vector2, label: String) -> void:
@@ -167,12 +179,21 @@ func _ready() -> void:
 		_run_demo()
 
 
+func _exit_tree() -> void:
+	CarVisual.clear_cache()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and state == "playing" and not demo:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
 # ---------------------------------------------------------------- input
 
-func _act(action: String, keys: Array, buttons: Array = [], axes: Array = []) -> void:
+func _act(action: String, keys: Array, buttons: Array = [], axes: Array = [], deadzone := 0.2) -> void:
 	if InputMap.has_action(action):
 		InputMap.erase_action(action)
-	InputMap.add_action(action, 0.2)
+	InputMap.add_action(action, deadzone)
 	for k: int in keys:
 		var e := InputEventKey.new()
 		e.physical_keycode = k as Key
@@ -189,12 +210,16 @@ func _act(action: String, keys: Array, buttons: Array = [], axes: Array = []) ->
 
 
 func _setup_input() -> void:
-	_act("move_forward", [KEY_W, KEY_UP], [], [[JOY_AXIS_LEFT_Y, -1.0]])
-	_act("move_back", [KEY_S, KEY_DOWN], [], [[JOY_AXIS_LEFT_Y, 1.0]])
-	_act("move_left", [KEY_A, KEY_LEFT], [], [[JOY_AXIS_LEFT_X, -1.0]])
-	_act("move_right", [KEY_D, KEY_RIGHT], [], [[JOY_AXIS_LEFT_X, 1.0]])
-	_act("gas", [KEY_W, KEY_UP], [], [[JOY_AXIS_TRIGGER_RIGHT, 1.0]])
-	_act("reverse", [KEY_S, KEY_DOWN], [], [[JOY_AXIS_TRIGGER_LEFT, 1.0]])
+	_act("move_forward", [KEY_W, KEY_UP], [], [[JOY_AXIS_LEFT_Y, -1.0]], 0.12)
+	_act("move_back", [KEY_S, KEY_DOWN], [], [[JOY_AXIS_LEFT_Y, 1.0]], 0.12)
+	_act("move_left", [KEY_A, KEY_LEFT], [], [[JOY_AXIS_LEFT_X, -1.0]], 0.12)
+	_act("move_right", [KEY_D, KEY_RIGHT], [], [[JOY_AXIS_LEFT_X, 1.0]], 0.12)
+	_act("look_left", [], [], [[JOY_AXIS_RIGHT_X, -1.0]], 0.14)
+	_act("look_right", [], [], [[JOY_AXIS_RIGHT_X, 1.0]], 0.14)
+	_act("look_up", [], [], [[JOY_AXIS_RIGHT_Y, -1.0]], 0.14)
+	_act("look_down", [], [], [[JOY_AXIS_RIGHT_Y, 1.0]], 0.14)
+	_act("gas", [KEY_W, KEY_UP], [], [[JOY_AXIS_TRIGGER_RIGHT, 1.0]], 0.06)
+	_act("reverse", [KEY_S, KEY_DOWN], [], [[JOY_AXIS_TRIGGER_LEFT, 1.0]], 0.06)
 	_act("sprint", [KEY_SHIFT], [JOY_BUTTON_LEFT_STICK])
 	_act("handbrake", [KEY_SPACE], [JOY_BUTTON_B])
 	_act("interact", [KEY_E], [JOY_BUTTON_A])
@@ -213,7 +238,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var mm := event as InputEventMouseMotion
-		rig.look(mm.relative.x * 0.0032, mm.relative.y * 0.0026)
+		var y_sign := -1.0 if invert_y else 1.0
+		rig.look(mm.relative.x * 0.003 * look_sensitivity, mm.relative.y * 0.0024 * look_sensitivity * y_sign)
 	elif event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -561,7 +587,7 @@ func _on_crash(speed: float, v: Vehicle) -> void:
 	if v != vehicle or _crash_cooldown > 0.0:
 		return
 	_crash_cooldown = 0.35
-	sound.play("crash", clampf(1.25 - speed * 0.02, 0.7, 1.25))
+	sound.play("crash", clampf(1.25 - speed * 0.02, 0.7, 1.25), clampf(speed / 16.0, 0.25, 1.0))
 	rig.add_shake(clampf(speed * 0.02, 0.05, 0.5))
 	missions.on_crash(speed)
 	if speed > 12.0:
@@ -662,10 +688,17 @@ func _process(delta: float) -> void:
 		return
 	if state == "playing":
 		_play(delta)
-	elif Input.is_action_just_pressed("pause") or (state == "map" and Input.is_action_just_pressed("map")):
+	elif Input.is_action_just_pressed("pause") or Input.is_action_just_pressed("ui_cancel") or (state == "map" and Input.is_action_just_pressed("map")):
 		if state == "paused" or state == "map":
 			set_state("playing")
 	if state == "map":
+		var pan_vec := Input.get_vector("look_left", "look_right", "look_up", "look_down")
+		if pan_vec.length() > 0.05:
+			ui.bigmap.pan_by(pan_vec * 520.0 * delta)
+		var zoom_in := Input.get_action_strength("gas") if Input.get_connected_joypads().size() > 0 and not Input.is_key_pressed(KEY_W) and not Input.is_key_pressed(KEY_UP) else 0.0
+		var zoom_out := Input.get_action_strength("reverse") if Input.get_connected_joypads().size() > 0 and not Input.is_key_pressed(KEY_S) and not Input.is_key_pressed(KEY_DOWN) else 0.0
+		if zoom_in > 0.1 or zoom_out > 0.1:
+			ui.bigmap.zoom_by(1.0 + (zoom_in - zoom_out) * 1.4 * delta)
 		ui.bigmap.queue_redraw()
 
 
@@ -684,14 +717,17 @@ func _play(delta: float) -> void:
 		ui.hud.visible = not ui.hud.visible
 	if Input.is_action_just_pressed("interact"):
 		_interact()
-	var look := Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
-	if look.length() > 0.2:
-		rig.look(look.x * 2.6 * delta, look.y * 1.6 * delta)
+	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
+	if look.length() > 0.01:
+		var curved := look.normalized() * pow(minf(look.length(), 1.0), 1.5)
+		var y_sign := -1.0 if invert_y else 1.0
+		rig.look(curved.x * 2.8 * look_sensitivity * delta, curved.y * 1.8 * look_sensitivity * y_sign * delta)
 	_crash_cooldown = maxf(0.0, _crash_cooldown - delta)
 	if vehicle != null:
 		var gas := Input.get_action_strength("gas")
 		var rev := Input.get_action_strength("reverse")
-		var steer := Input.get_action_strength("move_left") - Input.get_action_strength("move_right")
+		var raw_steer := Input.get_action_strength("move_left") - Input.get_action_strength("move_right")
+		var steer := signf(raw_steer) * pow(absf(raw_steer), 1.45)
 		var hand := Input.is_action_pressed("handbrake")
 		if Input.is_action_just_pressed("auto_drive"):
 			if auto_drive:
@@ -708,13 +744,18 @@ func _play(delta: float) -> void:
 		if auto_drive:
 			_drive_auto()
 		else:
-			vehicle.throttle = gas - rev
+			if rev > 0.05 and vehicle.forward_speed > 0.5:
+				vehicle.throttle = 0.0
+				vehicle.brake_input = rev
+			else:
+				vehicle.throttle = gas - rev
+				vehicle.brake_input = 0.0
 			vehicle.steer_input = steer
-			vehicle.brake_input = 0.0
 			vehicle.handbrake = hand
+		vehicle.wetness = sky.wetness
 		if Input.is_action_just_pressed("lights"):
 			lights_override = 0 if vehicle.lights_on else 1
-		vehicle.lights_on = lights_override == 1 or (lights_override == -1 and sky.night > 0.35)
+		vehicle.lights_on = lights_override == 1 or (lights_override == -1 and (sky.night > 0.35 or sky.weather == "rain"))
 		sound.set_horn(Input.is_action_pressed("horn"))
 		if Input.is_action_just_pressed("reset_car"):
 			_reset_vehicle()
@@ -749,7 +790,7 @@ func _play(delta: float) -> void:
 	rig.update(delta, player, vehicle)
 	sky.update(delta, rig.cam.global_position)
 	var near_car := traffic.nearest(pos, 30.0)
-	sound.update(delta, vehicle, player, sky.wetness, sky.weather == "rain", (near_car["pos"] as Vector2).distance_to(pos) if not near_car.is_empty() else 99.0)
+	sound.update(delta, vehicle, player, sky.wetness, sky.weather == "rain", (near_car["pos"] as Vector2).distance_to(pos) if not near_car.is_empty() else 99.0, rig.first_person)
 	_update_hud(delta, pos, speed)
 	_slow_tick -= delta
 	if _slow_tick <= 0.0:
