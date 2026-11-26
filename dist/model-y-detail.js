@@ -67,6 +67,8 @@ export function loadDetailedModelY(root,fallback,onWheels,{src=MODEL_Y_SRC,onBod
     try{
      const model=gltf.scene||gltf.scenes?.[0];if(!model)throw new Error('GLB has no scene');
      const wheels=rigWheels(model,await meta);tuneMaterials(model);model.name='Tesla Model Y 2021 (detailed)';
+     const sc=document.createElement('canvas');sc.width=sc.height=128;const sg=sc.getContext('2d'),sr=sg.createRadialGradient(64,64,14,64,64,62);sr.addColorStop(0,'rgba(6,8,12,0.78)');sr.addColorStop(.58,'rgba(6,8,12,0.44)');sr.addColorStop(1,'rgba(6,8,12,0)');sg.fillStyle=sr;sg.fillRect(0,0,128,128);
+     const blob=new T.Mesh(new T.PlaneGeometry(2.45,5.2),new T.MeshBasicMaterial({map:new T.CanvasTexture(sc),transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}));blob.rotation.x=-Math.PI/2;blob.position.y=.025;model.add(blob);
      root.add(model);for(const node of fallback)node.visible=false;
      const bodyNode=model.getObjectByName('Body');if(bodyNode&&onBody)onBody(bodyNode);
      if(wheels){const axis=new T.Vector3(1,0,0),up=new T.Vector3(0,1,0),q=new T.Quaternion();onWheels((speed,steer,dt)=>{for(const w of wheels){w.angle+=w.sign*speed*dt/w.radius;w.spin.quaternion.copy(w.spinBase).multiply(q.setFromAxisAngle(axis,w.angle));w.steer.quaternion.copy(w.steerBase).multiply(q.setFromAxisAngle(up,w.front?steer:0))}})}

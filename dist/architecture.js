@@ -3,16 +3,109 @@ const S=1/1.5;
 export function addArchitecture(scene,renderer,geo=window.Geo){
  const Geo=geo;
  const loader=new T.TextureLoader(),ready=[];function tex(file,color=true){let t=loader.load('assets/materials/'+file);t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());if(color)t.colorSpace=T.SRGBColorSpace;return t}
- const brick=tex('brick-color.jpg'),normal=tex('brick-normal.jpg',false),concrete=tex('concrete-color.jpg');
- const mat={brick:new T.MeshStandardMaterial({map:brick,normalMap:normal,normalScale:new T.Vector2(.3,.3),color:'#ffffff',vertexColors:true,roughness:.94,side:T.DoubleSide}),stone:new T.MeshStandardMaterial({map:concrete,color:'#ffffff',vertexColors:true,roughness:.93,side:T.DoubleSide}),trim:new T.MeshStandardMaterial({color:'#ffffff',vertexColors:true,roughness:.85,side:T.DoubleSide}),glass:new T.MeshPhysicalMaterial({color:'#52636f',metalness:.18,roughness:.19,envMapIntensity:1.2,vertexColors:true,side:T.DoubleSide,clearcoat:1,clearcoatRoughness:.08}),roof:new T.MeshStandardMaterial({color:'#ffffff',vertexColors:true,roughness:.88,side:T.DoubleSide})};
- mat.stone.bumpMap=concrete;mat.stone.bumpScale=.025;mat.stone.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>','#ifdef USE_MAP\n vec4 surface = texture2D(map,vMapUv); diffuseColor *= mix(vec4(0.88,0.87,0.83,1.0),surface,0.15);\n#endif');};
- // Original procedural clapboard, scaled in meters rather than stretched to the wall.
- const cc=document.createElement('canvas');cc.width=cc.height=256;let cx=cc.getContext('2d');cx.fillStyle='#e0dfd5';cx.fillRect(0,0,256,256);for(let y=0;y<256;y+=24){cx.fillStyle='#77776b';cx.fillRect(0,y,256,2);cx.fillStyle='#ffffff88';cx.fillRect(0,y+3,256,3)}let siding=new T.CanvasTexture(cc);siding.colorSpace=T.SRGBColorSpace;siding.wrapS=siding.wrapT=T.RepeatWrapping;mat.siding=new T.MeshStandardMaterial({map:siding,vertexColors:true,color:'#ffffff',roughness:.85,side:T.DoubleSide});
+ const brick=tex('brick-color.jpg'),normal=tex('brick-normal.jpg',false),concrete=tex('concrete-color.jpg'),sidewalkNorm=tex('sidewalk-normal.jpg',false);
+ // World-space architectural weathering: kills brick/siding repetition, adds real sidewalk-level
+ // splash/grime darkening and subtle masonry roughness variation like real Street View photos.
+ function addWeathering(m,grimeStrength=.24,macroStrength=.16,isStone=false){
+  m.onBeforeCompile=shader=>{
+   shader.vertexShader=shader.vertexShader
+    .replace('#include <common>','#include <common>\nvarying vec3 vArchPos;\nvarying vec3 vArchNrm;')
+    .replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvArchPos=(modelMatrix*vec4(transformed,1.0)).xyz;\nvArchNrm=normalize(mat3(modelMatrix)*objectNormal);');
+   shader.fragmentShader=shader.fragmentShader
+    .replace('#include <common>',`#include <common>
+varying vec3 vArchPos;
+varying vec3 vArchNrm;
+float archHash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float archNoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(archHash(i),archHash(i+vec2(1,0)),f.x),mix(archHash(i+vec2(0,1)),archHash(i+vec2(1,1)),f.x),f.y);}`)
+    .replace('#include <map_fragment>',`${isStone?`#ifdef USE_MAP
+ vec4 surface=texture2D(map,vMapUv);
+ vec4 surfaceFar=texture2D(map,vMapUv*0.23+vec2(0.37,0.19));
+ diffuseColor*=mix(vec4(0.86,0.85,0.82,1.0),surface*0.68+surfaceFar*0.32,0.34);
+#endif`:`#include <map_fragment>`}
+ vec2 w2=vec2(vArchPos.x+vArchPos.z,vArchPos.y);
+ float macro=archNoise(w2*0.16)*0.65+archNoise(w2*0.52+4.1)*0.35;
+ float stain=archNoise(vec2((vArchPos.x+vArchPos.z)*0.45,vArchPos.y*0.14+2.3));
+ float grime=1.0-${grimeStrength.toFixed(3)}*(1.0-smoothstep(0.0,1.45,vArchPos.y))*(0.55+0.45*stain);
+ float tone=mix(1.0-${macroStrength.toFixed(3)},1.0+${(macroStrength*0.85).toFixed(3)},macro);
+ // Subtle vertical rain-streak shading under cornices and bands.
+ float streak=0.95+0.05*archNoise(vec2((vArchPos.x+vArchPos.z)*1.8,vArchPos.y*0.18));
+ diffuseColor.rgb*=grime*tone*streak;`)
+    .replace('#include <roughnessmap_fragment>',`#include <roughnessmap_fragment>
+ float rVar=archNoise(vec2(vArchPos.x+vArchPos.z,vArchPos.y)*0.35);
+ roughnessFactor=clamp(roughnessFactor+(rVar-0.5)*0.16+(1.0-smoothstep(0.0,1.2,vArchPos.y))*0.06,0.45,0.99);`);
+  };
+  return m;
+ }
+ // Realistic Street View architectural glass: dark interior depth with subtle blinds/curtains,
+ // per-window lighting variation, and crisp Fresnel sky/cloud reflection at grazing angles.
+ function makeGlassMaterial(){
+  const g=new T.MeshPhysicalMaterial({color:'#162028',metalness:.10,roughness:.04,envMapIntensity:2.3,vertexColors:true,side:T.DoubleSide,clearcoat:1,clearcoatRoughness:.03});
+  g.onBeforeCompile=shader=>{
+   shader.vertexShader=shader.vertexShader
+    .replace('#include <common>','#include <common>\nvarying vec3 vGlassWorld;\nvarying vec3 vGlassNrm;')
+    .replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvGlassWorld=(modelMatrix*vec4(transformed,1.0)).xyz;\nvGlassNrm=normalize(mat3(modelMatrix)*objectNormal);');
+   shader.fragmentShader=shader.fragmentShader
+    .replace('#include <common>',`#include <common>
+varying vec3 vGlassWorld;
+varying vec3 vGlassNrm;
+float gHash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float gNoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(gHash(i),gHash(i+vec2(1,0)),f.x),mix(gHash(i+vec2(0,1)),gHash(i+vec2(1,1)),f.x),f.y);}`)
+    .replace('#include <color_fragment>',`#include <color_fragment>
+ vec3 viewDir=normalize(cameraPosition-vGlassWorld);
+ vec3 wn=normalize(vGlassNrm);
+ if(!gl_FrontFacing)wn=-wn;
+ float ndv=clamp(abs(dot(wn,viewDir)),0.0,1.0);
+ float fresnel=pow(1.0-ndv,3.4);
+ float horiz=abs(wn.x)>abs(wn.z)?vGlassWorld.z:vGlassWorld.x;
+ vec2 cellId=floor(vec2(horiz/2.6,vGlassWorld.y/3.1));
+ vec2 local=fract(vec2(horiz/2.6,vGlassWorld.y/3.1));
+ float rnd=gHash(cellId);
+ float rnd2=gHash(cellId+17.3);
+ vec2 para=local+vec2(dot(viewDir,vec3(-wn.z,0.0,wn.x)),viewDir.y)*0.18;
+ float groundFloor=1.0-smoothstep(3.2,3.9,vGlassWorld.y);
+ // Deep dark interior room depth with realistic blinds, curtains & dim storefront interiors.
+ vec3 roomDark=mix(vec3(0.014,0.018,0.022),vec3(0.048,0.050,0.046),smoothstep(0.18,0.95,para.y));
+ float hasBlinds=step(0.46,rnd)*(1.0-groundFloor);
+ float blindDrop=mix(0.28,0.78,rnd2);
+ float inBlinds=hasBlinds*step(1.0-blindDrop,local.y);
+ float slat=0.62+0.38*sin(vGlassWorld.y*72.0);
+ vec3 blindCol=mix(vec3(0.16,0.17,0.16),vec3(0.32,0.30,0.26),rnd2)*slat;
+ float hasCurtain=step(0.76,rnd2)*(1.0-hasBlinds)*(1.0-groundFloor);
+ float curtainMask=hasCurtain*smoothstep(0.20,0.38,abs(local.x-0.5));
+ vec3 curtainCol=mix(vec3(0.22,0.20,0.18),vec3(0.14,0.16,0.17),rnd);
+ // Ground-floor retail interior: dark shadowy depth with subtle backlit wall/shelf tone.
+ float shopGlow=smoothstep(0.42,0.92,para.y)*(0.25+0.75*rnd);
+ vec3 shopHint=mix(vec3(0.015,0.018,0.022),vec3(0.095,0.085,0.068),shopGlow);
+ vec3 interior=mix(roomDark,blindCol,inBlinds*0.72);
+ interior=mix(interior,curtainCol,curtainMask*0.6);
+ interior=mix(interior,shopHint,groundFloor*0.85);
+ // Crisp high-contrast sky + opposite-street reflection only strong at oblique Fresnel angles.
+ vec3 reflDir=reflect(-viewDir,wn);
+ float skyT=clamp(reflDir.y*1.3+0.15,0.0,1.0);
+ float clouds=gNoise(reflDir.xz/(abs(reflDir.y)+0.35)*1.5+vec2(2.1,0.7));
+ vec3 reflSky=mix(vec3(0.38,0.48,0.58),vec3(0.18,0.34,0.58),skyT);
+ reflSky=mix(reflSky,vec3(0.76,0.78,0.80),smoothstep(0.52,0.84,clouds)*0.55);
+ vec3 reflStreet=vec3(0.06,0.065,0.07)*(0.65+0.35*gNoise(vec2(horiz*0.6,reflDir.y*6.0)));
+ vec3 envRefl=mix(reflStreet,reflSky,smoothstep(-0.14,0.14,reflDir.y));
+ float paneTint=0.90+0.14*rnd;
+ diffuseColor.rgb=mix(interior,envRefl*vec3(0.88,0.95,1.0),clamp(fresnel*0.58+0.06,0.0,0.68))*paneTint;`);
+  };
+  return g;
+ }
+ const mat={
+  brick:addWeathering(new T.MeshStandardMaterial({map:brick,normalMap:normal,normalScale:new T.Vector2(.65,.65),color:'#dfd7cf',vertexColors:true,roughness:.92,side:T.DoubleSide}),.26,.18,false),
+  stone:addWeathering(new T.MeshStandardMaterial({map:concrete,normalMap:sidewalkNorm,normalScale:new T.Vector2(.28,.28),color:'#ebe8e1',vertexColors:true,roughness:.91,side:T.DoubleSide}),.22,.15,true),
+  trim:addWeathering(new T.MeshStandardMaterial({map:concrete,bumpMap:concrete,bumpScale:.032,color:'#eceae3',vertexColors:true,roughness:.87,side:T.DoubleSide}),.16,.11,true),
+  glass:makeGlassMaterial(),
+  roof:addWeathering(new T.MeshStandardMaterial({map:concrete,color:'#d8d8d4',vertexColors:true,roughness:.93,side:T.DoubleSide}),.08,.18,true),
+ };
+ // Realistic clapboard siding with subtle wood grain and shadow lap lines.
+ const cc=document.createElement('canvas');cc.width=cc.height=256;let cx=cc.getContext('2d');cx.fillStyle='#dad8cf';cx.fillRect(0,0,256,256);for(let y=0;y<256;y+=22){const g=cx.createLinearGradient(0,y,0,y+22);g.addColorStop(0,'#8c8b83');g.addColorStop(.14,'#d8d6ce');g.addColorStop(.92,'#e4e2da');g.addColorStop(1,'#62625b');cx.fillStyle=g;cx.fillRect(0,y,256,22)}let siding=new T.CanvasTexture(cc);siding.colorSpace=T.SRGBColorSpace;siding.wrapS=siding.wrapT=T.RepeatWrapping;mat.siding=addWeathering(new T.MeshStandardMaterial({map:siding,bumpMap:siding,bumpScale:.035,vertexColors:true,color:'#ecebe6',roughness:.84,side:T.DoubleSide}),.20,.14,false);
  const batches=new Map(),wallMeshes=[],special=[];let count=0;
  function b(key,type){let k=key+'|'+type;if(!batches.has(k))batches.set(k,{p:[],uv:[],c:[],type});return batches.get(k)}
  function tri(out,a,b,c,color,uv=[[0,0],[1,0],[0,1]]){out.p.push(...a,...b,...c);for(let i=0;i<3;i++){out.c.push(color.r,color.g,color.b);out.uv.push(...uv[i])}}
  function quad(out,a,b,c,d,color,u=1,v=1){tri(out,a,b,c,color,[[0,0],[u,0],[u,v]]);tri(out,a,c,d,color,[[0,0],[u,v],[0,v]])}
- const C=x=>new T.Color(x),stone=C('#d2c7ad'),dark=C('#303a3d'),roofColor=C('#444b4c');
+ const C=x=>new T.Color(x),stone=C('#cfc9bc'),dark=C('#2d3336'),roofColor=C('#464a4c');
  function edges(p){let area=0;for(let i=0;i<p.length;i++){let a=p[i],e=p[(i+1)%p.length];area+=a[0]*e[1]-e[0]*a[1]}const sign=area>0?1:-1;return p.map((a,i)=>{let e=p[(i+1)%p.length],dx=e[0]-a[0],dz=e[1]-a[1],len=Math.hypot(dx,dz);return{a,e,dx:dx/len,dz:dz/len,nx:dz/len*sign,nz:-dx/len*sign,len}}).filter(e=>e.len>.05)}
  function pt(e,t,y,off=0){return[e.a[0]+e.dx*t+e.nx*off,y,e.a[1]+e.dz*t+e.nz*off]}
  function wall(out,e,bottom,top,col,off=0){let a=pt(e,0,bottom,off),at=pt(e,0,top,off),bt=pt(e,e.len,top,off),b=pt(e,e.len,bottom,off),u=e.len/2,v=(top-bottom)/2;tri(out,a,at,bt,col,[[0,0],[0,v],[u,v]]);tri(out,a,bt,b,col,[[0,0],[u,v],[u,0]])}
@@ -40,7 +133,7 @@ export function addArchitecture(scene,renderer,geo=window.Geo){
  let h=parseFloat(src.heightMeters)||floors*3.25;if(academy){h=17.4;floors=4}if(borden){h=6.6;floors=2}if(justice){h=21;floors=5}if(hall){h=22;floors=4}if(customHouse){h=8.2;floors=2}h=Math.min(75,Math.max(3,h));
  let isHouse=!downtown&&area<260&&!mill||borden,type=isHouse?'siding':justice||hall||customHouse?'stone':'brick';
  if(mill&&src.name.includes('Tecumseh'))type='stone';
- let color=C(borden?'#8c9b65':academy?'#bd8a74':customHouse?'#c9c4b4':mill?'#b8b5a6':isHouse?['#ddd7c3','#b2b9ac','#b5b6bd','#ccc1ab','#a1afa4'][index%5]:['#bbaba1','#c9b6a5','#b7a494','#d0c5af'][index%4]);
+ let color=C(borden?'#87926b':academy?'#a97c6d':customHouse?'#c8c4b8':mill?'#aea99d':isHouse?['#d5d1c6','#aeb5ac','#b6b9be','#c6beb0','#a1aba4'][index%5]:['#a99a91','#b4a396','#9f9188','#bcb4a6'][index%4]);
  if(src.colour&&CSS.supports('color',src.colour))color=C(src.colour);if(!academy&&!borden&&!hall&&!justice&&!customHouse&&/concrete|stone|plaster/.test(src.material||''))type='stone';
  const outs={wall:b(key,type),trim:b(key,'trim'),glass:b(key,'glass'),roof:b(key,'roof')};
  // Landmark models retain their dedicated treatment.  A rotating subset of downtown

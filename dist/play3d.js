@@ -39,7 +39,7 @@ let autoRoute=null,currentRoadType='';
 // Controller: one stable active pad, polled every frame (also while paused or in menus).
 const padState=createPadState();let padFrame=readPad(padState,[]),padLookHold=0,padMenu=null,padStatusKey='',padWarned='',inputFocused=document.hasFocus();
 let seed=213;const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};const cars=[];
-for(let i=0;i<(isMobile?22:45);i++){let route=Geo.driving[Math.floor(rand()*Geo.driving.length)];rand();const root=makeCar(city,['#bdb99e','#536c75','#a56b4f','#b29761','#7d8a72'][i%5]),c={root,route,pos:rand()*300,speed:8+rand()*9,parked:false};placeTrafficCar(Geo,c);cars.push(c)}
+for(let i=0;i<(isMobile?22:45);i++){let route=Geo.driving[Math.floor(rand()*Geo.driving.length)];rand();const root=makeCar(city,['#d8dce0','#2d3238','#eef0f2','#3a4d61','#5c2628','#6c7378','#8e887a'][i%7]),c={root,route,pos:rand()*300,speed:8+rand()*9,parked:false};placeTrafficCar(Geo,c);cars.push(c)}
 let carStart=Geo.nearestRoad(spawn.x+12,spawn.y+5,true),parkedRoot=makeModelY(city),carHeading=Math.PI/2-carStart.angle,curb=Math.max(0,Math.min(3.6,(carStart.r?.width||0)*S/2-1.1))/S,carX=carStart.x-Math.cos(carHeading)*curb,carY=carStart.y+Math.sin(carHeading)*curb;if(Geo.blocked(carX,carY)){carX=carStart.x;carY=carStart.y}cars.push({root:parkedRoot,x:carX,y:carY,heading:carHeading,parked:true,speed:0,velocity:0,model:'White Tesla Model Y'});
 // Populate each city with varied local pedestrians; three nearby people use shared rigged models.
 const crowd=createPedestrians(scene,Geo,rand);crowd.update(0,0,player);
