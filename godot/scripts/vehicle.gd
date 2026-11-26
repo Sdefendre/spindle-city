@@ -19,10 +19,12 @@ var driver := ""            # "", "player" or "auto"
 var lights_on := false
 var forward_speed := 0.0    # m/s along the nose
 var skid := 0.0             # 0 grip .. 1 sliding
+var wetness := 0.0          # 0 dry .. 1 soaked road
 var parts: Dictionary
 var wheels := {}
 var headlights: Array[SpotLight3D] = []
 var _steer := 0.0
+var _reverse_hold := 0.0
 var _last_velocity := Vector3.ZERO
 var _brake_glow := 0.0
 var idle_time := 0.0
@@ -78,7 +80,7 @@ func _setup() -> void:
 		wheel.damping_compression = 2.4
 		wheel.damping_relaxation = 3.9
 		wheel.wheel_friction_slip = spec["grip"] * (1.0 if front else 0.96)
-		wheel.wheel_roll_influence = 0.04
+		wheel.wheel_roll_influence = 0.07
 		wheel.use_as_steering = front
 		wheel.use_as_traction = spec["awd"] or not front
 		add_child(wheel)
@@ -112,40 +114,51 @@ func _physics_process(delta: float) -> void:
 	var top: float = spec["top"]
 	var force := 0.0
 	var brake_amount := brake_input
+	if forward_speed > 1.2:
+		_reverse_hold = 0.22
 	if throttle > 0.01:
+		_reverse_hold = 0.0
 		if forward_speed < -0.8:
 			brake_amount = maxf(brake_amount, throttle)
 		else:
 			force = throttle * mass * spec["accel"] * clampf(1.0 - pow(speed / top, 2.0), 0.0, 1.0)
 	elif throttle < -0.01:
-		if forward_speed > 0.8:
+		if forward_speed > 0.6:
+			brake_amount = maxf(brake_amount, -throttle)
+		elif _reverse_hold > 0.0 and driver == "player":
+			_reverse_hold = maxf(0.0, _reverse_hold - delta)
 			brake_amount = maxf(brake_amount, -throttle)
 		elif forward_speed > -9.0:
 			force = throttle * mass * 3.0
-	elif driver == "":
-		brake_amount = maxf(brake_amount, 0.5)
+	else:
+		if brake_input <= 0.05:
+			_reverse_hold = 0.0
+		if driver == "":
+			brake_amount = maxf(brake_amount, 0.5)
 	# Ease off the power when the driven wheels are sliding.
 	force *= lerpf(1.0, 0.35, clampf(skid * 1.4, 0.0, 1.0)) if not handbrake else 0.5
 	engine_force = force / traction_wheels()
 	# Brake is an impulse per physics step, so scale it by mass and tick rate.
 	var ticks := float(Engine.physics_ticks_per_second)
-	var per_wheel := mass * 9.5 / 4.0 / ticks
+	var wet_brake := lerpf(1.0, 0.86, wetness)
+	var per_wheel := mass * 9.5 * wet_brake / 4.0 / ticks
 	var rolling := mass * (0.35 + 0.9 * float(absf(throttle) < 0.01)) / 4.0 / ticks
-	brake = maxf(brake_amount * per_wheel, rolling if force == 0.0 else 0.0)
-	# Cap steering so cornering force stays near the tyres' grip at speed.
+	var base_brake := maxf(brake_amount * per_wheel, rolling if force == 0.0 else 0.0)
+	brake = base_brake
+	# Speed-sensitive steering: nimble around city blocks, planted on the highway.
 	var wheelbase: float = spec["front"] - spec["rear"]
-	var limit := minf(0.6, atan(float(spec["grip"]) * 2.5 * wheelbase / maxf(speed * speed, 1.0)))
+	var grip: float = float(spec["grip"]) * lerpf(1.0, 0.78, wetness)
+	var limit := minf(0.62, atan(grip * 2.9 * wheelbase / maxf(speed * speed * 0.9, 1.0)))
 	var target := steer_input * limit
-	_steer = move_toward(_steer, target, delta * (2.6 if absf(target) > absf(_steer) else 4.2))
+	var fast_return := absf(target) < absf(_steer) or target * _steer < 0.0
+	_steer = move_toward(_steer, target, delta * (4.8 if fast_return else 2.8))
 	steering = _steer
-	var grip: float = spec["grip"]
 	var slide := 0.0
 	for key: String in wheels:
 		var wheel: VehicleWheel3D = wheels[key]
 		var front := wheel.use_as_steering
 		wheel.wheel_friction_slip = grip * (1.0 if front else (0.34 if handbrake else 0.96))
-		if not front and handbrake:
-			wheel.brake = per_wheel * 1.6
+		wheel.brake = maxf(base_brake, per_wheel * 1.6) if (not front and handbrake) else base_brake
 		if wheel.is_in_contact():
 			slide = maxf(slide, 1.0 - wheel.get_skidinfo())
 	skid = move_toward(skid, slide if speed > 4.0 else 0.0, delta * 5.0)
@@ -199,7 +212,7 @@ func drive_toward(target: Vector2, want_speed: float) -> void:
 	var to := target - map_pos()
 	var fwd := heading_dir()
 	var angle := fwd.angle_to(to)
-	steer_input = clampf(-angle * 1.8, -1.0, 1.0)
+	steer_input = clampf(-angle * 1.4, -1.0, 1.0)
 	var want := want_speed * clampf(1.0 - absf(angle) * 0.9, 0.3, 1.0)
 	var err := want - forward_speed
 	throttle = clampf(err * 0.5, -0.2, 0.75)

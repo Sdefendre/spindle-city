@@ -25,7 +25,7 @@ func setup(owner_game: Node, city: CityData) -> void:
 	_rng.randomize()
 
 
-static func beacon(color: Color, text: String, radius := 2.4) -> Node3D:
+static func beacon(color: Color, text: String, radius := 2.4, see_through := false) -> Node3D:
 	var root := Node3D.new()
 	var mi := MeshInstance3D.new()
 	var mesh := CylinderMesh.new()
@@ -62,14 +62,14 @@ static func beacon(color: Color, text: String, radius := 2.4) -> Node3D:
 		var label := Label3D.new()
 		label.text = text
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		label.no_depth_test = true
+		label.no_depth_test = see_through
 		label.fixed_size = true
 		label.pixel_size = 0.0011
 		label.font_size = 30
 		label.outline_size = 10
 		label.modulate = color.lightened(0.4)
-		label.position.y = 4.2
-		label.visibility_range_end = 420.0
+		label.position.y = 4.6
+		label.visibility_range_end = 420.0 if see_through else 180.0
 		root.add_child(label)
 	return root
 
@@ -170,7 +170,7 @@ func _show_target() -> void:
 		text = "Drop-off %d / %d" % [job["index"] + 1, stops.size()]
 	elif kind == "ride":
 		text = "Pick up passenger" if not job["boarded"] else "Passenger's destination"
-	_target_marker = beacon(KINDS[kind]["color"], text, 3.4 if kind == "trial" else 2.6)
+	_target_marker = beacon(KINDS[kind]["color"], text, 3.4 if kind == "trial" else 2.6, true)
 	add_child(_target_marker)
 	_place(_target_marker, pos)
 	game.set_waypoint(pos, text)

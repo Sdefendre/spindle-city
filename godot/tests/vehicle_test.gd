@@ -32,6 +32,14 @@ func _initialize() -> void:
 		while t < 6.0:
 			await physics_frame; t += 1.0 / 120.0
 		print("  reverse speed %.1f" % v.forward_speed)
+		v.throttle = 0.0; v.handbrake = true; t = 0.0
+		while t < 1.0:
+			await physics_frame; t += 1.0 / 120.0
+		v.handbrake = false; v.throttle = 1.0; var v_before := v.forward_speed; t = 0.0
+		while t < 2.0:
+			await physics_frame; t += 1.0 / 120.0
+		print("  handbrake release: rear_brake=%.3f speed %.1f -> %.1f" % [v.wheels["RL"].brake, v_before, v.forward_speed])
 		v.queue_free()
 		await physics_frame
+	CarVisual.clear_cache()
 	quit()

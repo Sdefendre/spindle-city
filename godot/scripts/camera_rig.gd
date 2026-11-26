@@ -13,6 +13,9 @@ var base_fov := 62.0
 var reduced_motion := false
 var _snap := true
 var _rng := RandomNumberGenerator.new()
+var _last_vehicle: Vehicle = null
+var _prev_car_yaw := 0.0
+var _steer_lead := 0.0
 
 
 func _ready() -> void:
@@ -42,7 +45,8 @@ func right_dir() -> Vector3:
 
 func look(delta_yaw: float, delta_pitch: float) -> void:
 	yaw -= delta_yaw
-	pitch = clampf(pitch + delta_pitch, -0.55, 1.1)
+	var min_pitch := -0.85 if first_person else -0.55
+	pitch = clampf(pitch + delta_pitch, min_pitch, 1.1)
 	look_hold = 1.6
 
 
@@ -58,13 +62,26 @@ func update(delta: float, player: Player, vehicle: Vehicle) -> void:
 	if vehicle != null:
 		speed = absf(vehicle.forward_speed)
 		focus = vehicle.global_position + Vector3(0, 1.0, 0)
+		var car_yaw := atan2(-vehicle.heading_dir().x, -vehicle.heading_dir().y)
+		if _last_vehicle == vehicle and not _snap:
+			# Turn the camera with the car through corners (fully in first person, gently in chase cam).
+			var turn := wrapf(car_yaw - _prev_car_yaw, -PI, PI)
+			yaw += turn * (1.0 if first_person else (0.0 if look_hold > 0.0 else 0.55))
+		_prev_car_yaw = car_yaw
+		_last_vehicle = vehicle
 		if look_hold <= 0.0:
-			var want := atan2(-vehicle.heading_dir().x, -vehicle.heading_dir().y)
-			if vehicle.forward_speed < -1.5:
+			var want := car_yaw
+			if not first_person and vehicle.forward_speed < -1.5:
 				want += PI
-			yaw = lerp_angle(yaw, want, 1.0 - exp(-(1.4 + speed * 0.08) * delta))
-			pitch = lerpf(pitch, 0.2, 1.0 - exp(-1.5 * delta))
+			var rate := 6.0 if first_person else (1.8 + speed * 0.09)
+			yaw = lerp_angle(yaw, want, 1.0 - exp(-rate * delta))
+			var want_pitch := 0.04 if first_person else 0.2
+			pitch = lerpf(pitch, want_pitch, 1.0 - exp(-(3.5 if first_person else 1.8) * delta))
+		var target_lead := clampf(vehicle.steering * 1.4, -0.5, 0.5) * clampf(speed / 12.0, 0.0, 1.0)
+		_steer_lead = lerpf(_steer_lead, 0.0 if (first_person or look_hold > 0.0 or reduced_motion) else target_lead, 1.0 - exp(-4.5 * delta))
 	else:
+		_last_vehicle = null
+		_steer_lead = 0.0
 		focus = player.global_position + Vector3(0, 1.5, 0)
 	var fov := base_fov
 	var offset := Vector3.ZERO
@@ -76,7 +93,13 @@ func update(delta: float, player: Player, vehicle: Vehicle) -> void:
 		var eye: Vector3
 		if vehicle != null:
 			var b := vehicle.global_transform.basis
-			eye = vehicle.global_position + b.x * 0.37 + b.y * 0.74 + b.z * -0.32
+			if vehicle.type == "model_y":
+				eye = vehicle.global_position + b.x * 0.37 + b.y * 0.79 + b.z * -0.24
+			else:
+				# Procedural cars have solid cabin boxes; place the view cleanly at the windshield.
+				var eye_y: float = float(vehicle.spec["height"]) - Vehicle.RIDE - 0.14
+				var eye_z: float = float(vehicle.spec["length"]) * 0.2
+				eye = vehicle.global_position + b.y * eye_y + b.z * eye_z
 		else:
 			eye = player.global_position + Vector3(0, 1.68, 0)
 		cam.global_position = eye + offset * 0.4
@@ -105,6 +128,7 @@ func update(delta: float, player: Player, vehicle: Vehicle) -> void:
 		else:
 			cam.global_position = cam.global_position.lerp(desired, 1.0 - exp(-14.0 * delta))
 		cam.global_position += offset
-		cam.look_at(focus + Vector3(0, 0.25, 0), Vector3.UP)
+		var look_target := focus + Vector3(0, 0.25, 0) - right_dir() * _steer_lead
+		cam.look_at(look_target, Vector3.UP)
 	_snap = false
 	cam.fov = lerpf(cam.fov, fov, 1.0 - exp(-4.0 * delta))
