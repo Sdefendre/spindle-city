@@ -17,10 +17,3 @@ Claude's session is ending. Everything below is the state it left.
 ## Still to do for release
 1. Finish and commit the in-progress web work (audio, materials, pedestrian physics, PWA, boost).
 2. Bump the service worker VERSION and publish `dist/` to the site in `.openai/hosting.json`.
-3. Optionally push `feat/godot-port` and `feat/top-ten-improvements`; the user has only approved pushing `main` and the Codex branch so far.
-
-## Godot port (`godot/`)
-- Run: `godot --path godot` (Godot 4.7.2 is installed). Details in `godot/README.md`.
-- Checks: `godot --headless --fixed-fps 60 --path godot -- --selftest` (add `--city=new-bedford`); both pass 18 of 18.
-- Not judged by a person: steering feel, mouse and controller input, audio balance.
-- Not built: hand-modelled landmarks, music, interiors, elevation, traffic lights, a standalone Mac app export.
