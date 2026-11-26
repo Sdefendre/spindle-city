@@ -11,10 +11,10 @@ export function createPedestrianPhysics(scene,Geo,{mobile=false}={}){
  function addWalls(x,z){if(walls.length)return;for(const b of Geo.buildings){if(x<b.box.x*S-35||x>b.box.r*S+35||z<b.box.y*S-35||z>b.box.b*S+35)continue;for(let i=1;i<b.p.length;i++){const a=b.p[i-1],q=b.p[i],dx=(q[0]-a[0])*S,dz=(q[1]-a[1])*S,len=Math.hypot(dx,dz);if(len<.1)continue;const wall=new C.Body({mass:0,shape:new C.Box(new C.Vec3(.1,2,len/2))});wall.position.set((a[0]+q[0])*S/2,2,(a[1]+q[1])*S/2);wall.quaternion.setFromEuler(0,Math.atan2(dx,dz),0);world.addBody(wall);walls.push(wall);}}}
  function knock(person,dx,dz,speed){
   if(person.knocked)return;const cap=mobile?3:6;if(fallen.length>=cap){const old=fallen.shift();clear(old);}
-  person.knocked=true;person.c.root.visible=false;const scale=person.scale||1,x=person.x*S,z=person.y*S,parts=[],joints=[],byName={};addWalls(x,z);
+  person.knocked=true;person.c.root.visible=false;const scale=person.scale||1,x=person.x*S,z=person.y*S,parts=[],joints=[],byName={};addWalls(x,z);const gy=Geo.groundY?Geo.groundY(x,z):0;ground.position.y=.09+gy;
   const variant=person.variant||{},material=color=>new T.MeshStandardMaterial({color,roughness:.8});
   const heading=person.c.root.rotation.y,s=Math.sin(heading),c=Math.cos(heading);
-  const point=(px,py,pz=0)=>new C.Vec3(x+(px*c+pz*s)*scale,.11+py*scale,z+(-px*s+pz*c)*scale);
+  const point=(px,py,pz=0)=>new C.Vec3(x+(px*c+pz*s)*scale,.11+gy+py*scale,z+(-px*s+pz*c)*scale);
   function part(name,mass,px,py,rx,ry,rz,color,sphere=false){const body=new C.Body({mass,linearDamping:.12,angularDamping:.4,sleepTimeLimit:1.5,sleepSpeedLimit:.16});body.addShape(sphere?new C.Sphere(rx*scale):new C.Box(new C.Vec3(rx*scale,ry*scale,rz*scale)));body.position.copy(point(px,py));body.quaternion.setFromEuler(0,heading,0);body.velocity.set(dx*Math.min(10,speed)*.72,Math.min(2,speed*.08),dz*Math.min(10,speed)*.72);world.addBody(body);const geometry=sphere?new T.SphereGeometry(rx*scale,12,8):new T.CapsuleGeometry(Math.min(rx,rz)*scale,Math.max(0,(ry*2-Math.min(rx,rz)*2))*scale,3,8);const mesh=new T.Mesh(geometry,material(color));if(!sphere)mesh.scale.x=rx/Math.min(rx,rz);mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh);const entry={body,mesh};parts.push(entry);byName[name]=entry;return body;}
   const coat=variant.jacket||'#5d6876',pants=variant.pants||'#303640',skin=variant.skin||'#b88765';
   part('pelvis',12,0,.88,.18,.12,.13,pants);part('torso',23,0,1.21,.24,.23,.14,coat);part('head',4,0,1.65,.14,.17,.14,skin,true);
@@ -24,7 +24,7 @@ export function createPedestrianPhysics(scene,Geo,{mobile=false}={}){
   byName.torso.body.angularVelocity.set(dz*3,0,-dx*3);fallen.push({person,parts,joints,age:0,pelvis:byName.pelvis.body});
  }
  function update(dt,car,people,player){
-  if(car){const x=car.x*S,z=car.y*S,speed=car.velocity||0;vehicle.position.set(x,.75,z);vehicle.quaternion.setFromEuler(0,car.heading,0);vehicle.velocity.set(Math.sin(car.heading)*speed,0,Math.cos(car.heading)*speed);
+  if(car){const x=car.x*S,z=car.y*S,speed=car.velocity||0;vehicle.position.set(x,.75+(Geo.groundY?Geo.groundY(x,z):0),z);vehicle.quaternion.setFromEuler(0,car.heading,0);vehicle.velocity.set(Math.sin(car.heading)*speed,0,Math.cos(car.heading)*speed);
    if(Math.abs(speed)>1)for(const p of people){if(p.knocked||!p.c.root.visible)continue;const dx=p.x*S-x,dz=p.y*S-z,c=Math.cos(car.heading),s=Math.sin(car.heading);if(Math.abs(dx*c-dz*s)<1.2&&Math.abs(dx*s+dz*c)<2.75){knock(p,Math.sin(car.heading)*Math.sign(speed),Math.cos(car.heading)*Math.sign(speed),Math.abs(speed));lastImpact=Math.abs(speed);car.velocity*=.75;}}
   }else vehicle.position.set(0,-100,0);
   if(!fallen.length)return 0;world.step(1/60,Math.min(dt,.05),mobile?2:3);

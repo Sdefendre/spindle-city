@@ -1,12 +1,12 @@
 // Tesla City Drive service worker. Bump VERSION on every release so clients see an update.
 // Only Cache Storage entries with this app's prefix are touched; localStorage saves are never affected.
-const PREFIX='tesla-city-drive-',VERSION='20261123-1';
+const PREFIX='tesla-city-drive-',VERSION='20261125-1';
 const SHELL_CACHE=PREFIX+'shell-'+VERSION,ASSET_CACHE=PREFIX+'assets-'+VERSION;
 const SCOPE=self.registration.scope,INDEX=new URL('./index.html',SCOPE).href;
 // Small core shell only. Models, maps and audio are fetched lazily, so the game is not fully offline.
 const SHELL=['./index.html','./style.css','./app.js','./manifest.webmanifest','./assets/icons/apple-touch-icon.png','./assets/icons/icon-192.png','./assets/icons/icon-512.png'];
-const CODE=/\.(?:m?js|css|html|webmanifest)$/i,ASSET=/\.(?:png|jpe?g|webp|gif|svg|ico|glb|gltf|bin|ktx2|json|m4a|mp3|ogg|wav|woff2?)$/i;
-const MAX_ASSETS=48,MAX_BYTES=4*1024*1024;
+const CODE=/\.(?:m?js|css|html|webmanifest)$/i,ASSET=/\.(?:png|jpe?g|webp|gif|svg|ico|glb|gltf|bin|ktx2|hdr|json|m4a|mp3|ogg|wav|woff2?)$/i;
+const MAX_ASSETS=64,MAX_BYTES=6*1024*1024;
 // Never store errors, partial (206), opaque or redirected responses (e.g. a hosting sign-in redirect).
 const storable=response=>response&&response.status===200&&response.type==='basic'&&!response.redirected;
 

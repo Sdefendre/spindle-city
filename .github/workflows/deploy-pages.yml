@@ -1,0 +1,66 @@
+name: Test and Deploy Spindle City
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Syntax & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JS syntax
+        run: |
+          for f in dist/*.js; do
+            node --check "$f"
+          done
+      - name: Run unit tests
+        run: node --test tests/
+
+  deploy:
+    name: Deploy dist/ to gh-pages
+    needs: verify
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish dist/ to gh-pages
+        run: |
+          STAGE="$(mktemp -d)"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git clone --branch gh-pages --single-branch "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$STAGE"
+          else
+            git init "$STAGE"
+            git -C "$STAGE" checkout --orphan gh-pages
+            git -C "$STAGE" remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          rsync -av --delete --exclude='.git' dist/ "$STAGE/"
+          touch "$STAGE/.nojekyll"
+          cd "$STAGE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Deploy dist/ from ${GITHUB_SHA::7}"
+            git push origin gh-pages
+          else
+            echo "gh-pages is already up to date"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
